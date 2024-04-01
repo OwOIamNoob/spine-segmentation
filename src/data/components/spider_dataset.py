@@ -42,6 +42,7 @@ class SpiderDataset(Dataset):
             output["input"] = os.path.join(self.data_dir, self.data[index]["image"])
         output["output"] = os.path.join(self.data_dir, self.data[index]["label"])
         return output
+    
     def __len__(self) -> int:
         return len(self.data)
     
@@ -62,9 +63,9 @@ class SpiderTransformedDataset(Dataset):
 
 if __name__=="__main__":
     dataset = SpiderDataset(data_dir = "./data/dataset/spine_nii", json_path="./data/jsons/spine_v2.json")
-    transform = monai.transforms.Compose([monai.transforms.LoadImaged(keys=["input", "output"]),
-                                          monai.transforms.ConvertToMultiChannelBasedOnSpiderClassesd(keys=["output"]),
-                                          monai.transforms.ToTensord(keys=["input", "output"]),])
+    transform = monai.transforms.Compose([monai.transforms.LoadImaged(keys=["image", "label"]),
+                                          monai.transforms.ConvertToMultiChannelBasedOnSpiderClassesd(keys=["label"]),
+                                          monai.transforms.ToTensord(keys=["image", "label"]),])
     
     transformed = SpiderTransformedDataset(dataset, transform)
     data = dataset[0]

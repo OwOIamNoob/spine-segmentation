@@ -198,4 +198,4 @@ class MNISTDataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    _ = MNISTDataModule()
+    dataloader = 

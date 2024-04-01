@@ -1,0 +1,22 @@
+_target_: src.models.mnist_module.Brats21LitModule
+
+defaults:
+  - optimizer: adam
+  - scheduler: warmup_epochs
+
+net:
+  _target_: monai.networks.nets.SwinUNETR
+  img_size: [$roi_x, $roi_y, $roi_z]
+  in_channels: 4
+  out_channels: 3
+  feature_size: 48
+  use_checkpoint: null
+
+# compile model for faster training with pytorch 2.0
+compile: false
+
+sw_batch_size: 4
+roi_x: 96
+roi_y: 96
+roi_z: 96
+infer_overlap: 0.5
