@@ -1,0 +1,22 @@
+_target_: src.models.spider_module.SpiderLitModule
+
+defaults:
+  - optimizer: adam
+  - scheduler: warmup_cosine
+
+net:
+  _target_: monai.networks.nets.SwinUNETR
+  img_size: [32, 160, 160]
+  in_channels: 2
+  out_channels: 15
+  feature_size: 48
+  use_checkpoint: null
+
+# compile model for faster training with pytorch 2.0
+compile: false
+
+sw_batch_size: 2
+roi_x: 32
+roi_y: 160
+roi_z: 160
+infer_overlap: 0.5

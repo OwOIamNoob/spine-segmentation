@@ -1,0 +1,14 @@
+_target_: src.data.spider_datamodule.SpiderKFoldDataModule
+
+defaults:
+  - transform_train: spider_semantic.yaml
+  - transform_val: spider_semantic.yaml
+
+data_dir: ${paths.data_dir}/dataset/spine_nii
+json_path: ${paths.json_path}/spine_v5.json
+k: 9
+split_seed: 200 # keep it constant if you want to reproduce the result
+num_splits: 10 
+batch_size: 2 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
+num_workers: 4
+pin_memory: False

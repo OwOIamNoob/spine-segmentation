@@ -1,0 +1,34 @@
+_target_: monai.transforms.Compose
+transforms:
+  - _target_: monai.transforms.LoadImaged
+    keys: [image, label]
+    # image_only: False
+  - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
+    keys: [label]
+
+  - _target_: monai.transforms.EnsureChannelFirstd
+    keys: image
+    channel_dim: no_channel
+
+  - _target_: monai.transforms.Resized
+    keys: [image, label]
+    spatial_size: [32, 420, 420]
+    size_mode: all
+
+  - _target_: monai.transforms.NormalizeIntensityd
+    keys: image
+    nonzero: True
+    channel_wise: True
+
+  - _target_: monai.transforms.ToTensord
+    keys: [image, label]
+
+  
+# val_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+#             transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys=["label"]),
+#             transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )s

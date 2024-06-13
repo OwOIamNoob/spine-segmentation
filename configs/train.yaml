@@ -4,8 +4,8 @@
 # order of defaults determines the order in which configs override each other
 defaults:
   - _self_
-  - data: mnist
-  - model: brat
+  - data: spider_semantic ##brats21
+  - model: spider_semantic ##brats21
   - callbacks: default
   - logger: null # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
   - trainer: gpu
@@ -14,7 +14,7 @@ defaults:
   - hydra: default
 
   # experiment configs allow for version control of specific hyperparameters
-  # e.g. best hyperparameters for given model and datamodule
+  # e.g. best hyperparameters for given model ands datamodule
   - experiment: null
 
   # config for hyperparameter optimization

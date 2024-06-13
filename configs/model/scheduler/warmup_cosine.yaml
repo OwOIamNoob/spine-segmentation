@@ -1,4 +1,4 @@
-_target_: src.models.components.lr_scheduler.WarmupCosineAnnealingLR
+_target_: src.models.components.lr_scheduler.LinearWarmupCosineAnnealingLR
 _partial_: true
 warmup_epochs: 50
 max_epochs: ${trainer.max_epochs}

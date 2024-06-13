@@ -1,0 +1,26 @@
+_target_: monai.transforms.Compose
+transforms:
+  - _target_: monai.transforms.LoadImaged
+    keys: [image, label]
+    # image_only: False
+
+  - _target_: monai.transforms.ConvertToMultiChannelBasedOnBratsClassesd
+    keys: [label]
+
+  - _target_: monai.transforms.NormalizeIntensityd
+    keys: image
+    nonzero: True
+    channel_wise: True
+
+  - _target_: monai.transforms.ToTensord
+    keys: [image, label]
+
+  
+# val_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+#             transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys=["label"]),
+#             transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )
