@@ -1,0 +1,54 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: spider_semantic
+  - override /model: spider_semantic
+  - override /callbacks: default
+  - override /trainer: gpu
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["spider_semantic", "test_pipeline"]
+
+seed: 12345
+
+data:
+  json_path: ${paths.data_dir}/jsons/spine_experiment.json
+  batch_size: 2
+
+
+trainer:
+  min_epochs: 1
+  max_epochs: 10
+  # precision: 16 ##16-mixed ## reduce memory usage but may reduce accuracy
+#   gradient_clip_val: 0.5
+
+model:
+  # optimizer:
+  #   _target_: torch.optim.SGD
+  #   _partial_: true
+  #   lr: 0.0001
+  #   momentum: 0.99
+  #   weight_decay: 0.00001
+  #   nesterov: true
+  #   lr: 0.002
+  net:
+    in_channels: 1
+    feature_size: 36
+
+
+
+# data:
+#   batch_size: 64
+
+# logger:
+#   wandb:
+#     tags: ${tags}
+#     group: "brats21"
+#   aim:
+#     experiment: "test_pipeline"
+

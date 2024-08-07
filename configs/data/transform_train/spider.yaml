@@ -6,7 +6,12 @@ transforms:
 
   - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesd
     keys: label
-  
+ 
+  - _target_: monai.transforms.Spacingd
+    keys: [image, label]
+    pixdim:  ${data.spider.spacing}
+    mode: 3
+
   - _target_: monai.transforms.Resized
     keys: [image, label]
     spatial_size: [32, 420, 420]

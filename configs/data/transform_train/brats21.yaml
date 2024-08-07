@@ -7,6 +7,11 @@ transforms:
   - _target_: monai.transforms.ConvertToMultiChannelBasedOnBratsClassesd
     keys: label
 
+  # - _target_: monai.transforms.Spacingd   ##EXPERIMENT
+  #   keys: [image, label]
+  #   pixdim:  [2, 2, 2] ##${data.spider.spacing}
+  #   mode: 3
+
   - _target_: monai.transforms.CropForegroundd
     keys: [image, label]
     source_key: image

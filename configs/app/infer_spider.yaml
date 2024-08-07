@@ -1,7 +1,7 @@
 _target_: src.app.infer_spider.Inferer
 
 exp_name: Spider_Test
-checkpoint_path: /work/hpc/spine-segmentation/logs/train/runs/test_delete/semantic_old_version.ckpt
+checkpoint_path: /work/hpc/spine-segmentation/logs/train/runs/192-36-v2/checkpoints/epoch_253.ckpt ##/work/hpc/spine-segmentation/logs/train/runs/test_delete/semantic_old_version.ckpt
 data_name: Spider
 
 data_loader:
@@ -13,7 +13,7 @@ data_loader:
     dataset:
       _target_: src.data.components.spider_dataset.SpiderDataset
       data_dir: /data/hpc/spine/dataset/spine_nii
-      json_path: /data/hpc/spine/jsons/spine_infer.json
+      json_path: /data/hpc/spine/jsons/spine_infer_old_version.json
 
     transform:
       _target_: monai.transforms.Compose
@@ -21,6 +21,10 @@ data_loader:
         - _target_: monai.transforms.LoadImaged
           keys: [image, label]
           image_only: False
+          
+        # - _target_: monai.transforms.EnsureChannelFirstd
+        #   keys: image
+        #   channel_dim: no_channel
 
         - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
           keys: [label]
@@ -39,7 +43,7 @@ data_loader:
 
   batch_size: 1
   num_workers: 4
-  pin_memory: False`
+  pin_memory: False
   shuffle: False
   collate_fn: ## can delete?
     _target_: monai.data.utils.list_data_collate

@@ -56,7 +56,7 @@ class SpiderDataset(Dataset):
         else:
             # Add for debugging
             path = os.path.join(self.data_dir, self.data[index]["image"])
-            output["image"] = [path] ##[path, path] ##[path, path, path, path] ##Set to 4 because the model_inferr in validation_step
+            output["image"] = [path] ##, path, path, path]
         output["label"] = os.path.join(self.data_dir, self.data[index]["label"])
         return output
     
@@ -95,11 +95,13 @@ class SpiderTransformedDataset(Dataset):
         return len(self.dataset)
 
 if __name__=="__main__":
-    dataset = SpiderDataset(data_dir = "./data/dataset/spine_nii", json_path="./data/jsons/spine_v3.json")
+    dataset = SpiderDataset(data_dir = "/data/hpc/spine/dataset/spine_nii", json_path="/data/hpc/spine/jsons/spine_v3.json")
     # dataset = SpiderDataset(data_dir = "./data/dataset", json_path="/data/hpc/spine/jsons/brats21_folds_one.json")
     
     transform = monai.transforms.Compose([monai.transforms.LoadImaged(keys=["image", "label"], image_only = False),
                                           array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic(keys=["label"]),
+                                          monai.transforms.EnsureChannelFirstd(keys="image", channel_dim='no_channel'),
+                                          monai.transforms.Spacingd(keys=["image", "label"], pixdim=[1.75, 0.625, 0.58742571], mode=(3, "nearest")),
                                         #   monai.transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys=["label"]),
                                         #   monai.transforms.Resized(keys=["image", "label"], spatial_size=(250, 250, 155)),
                                           monai.transforms.ToTensord(keys=["image", "label"]),])

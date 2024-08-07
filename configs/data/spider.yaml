@@ -6,6 +6,8 @@ defaults:
 
 data_dir: ${paths.data_dir}/dataset/spine_nii
 json_path: ${paths.json_path}/spine_v5.json
+spacing: [1.75, 0.625, 0.58742571]
+
 k: 9
 split_seed: 200 # keep it constant if you want to reproduce the result
 num_splits: 10 

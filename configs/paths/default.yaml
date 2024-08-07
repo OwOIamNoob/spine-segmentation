@@ -4,8 +4,8 @@
 root_dir: ${oc.env:PROJECT_ROOT}
 
 # path to data directory
-data_dir: /data/hpc/spine ##${paths.root_dir}/data/
-json_path: /data/hpc/spine/jsons ##${paths.root_dir}/data/jsons/
+data_dir: ${paths.root_dir}/data/ ##/data/hpc/spine
+json_path: ${paths.root_dir}/data/jsons/ ##/data/hpc/spine/jsons
 # path to logging directory
 log_dir: ${paths.root_dir}/logs/
 

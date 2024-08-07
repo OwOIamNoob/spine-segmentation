@@ -1,0 +1,2 @@
+wandb_callback:
+  _target_: src.utils.callback.wandb.WandbCallback

@@ -94,7 +94,7 @@ class SpiderLitModule(LightningModule):
         infer_overlap = 0.5,
         # amp = False,
     ) -> None:
-        """Initialize a `Brast21LitModule`.
+        """Initialize a `SpiderLitModule`.
 
         :param net: The model to train.
         :param optimizer: The optimizer to use for training.
@@ -195,7 +195,7 @@ class SpiderLitModule(LightningModule):
         else:
             data, target = batch["image"], batch["label"]
         # print(data.size())
-        data, target = data.cuda(0), target.cuda(0) #??? vl fix cứng ----> export cuda_visible_devices rồi nên không quan trọng
+        data, target = data, target
             
         for param in self.net.parameters():
             param.grad = None
@@ -299,7 +299,9 @@ class SpiderLitModule(LightningModule):
             data, target = batch["image"], batch["label"]
             # data = torch.cat((data,data), dim=1)
             # print(data.size())
-            data, target = data.cuda(0), target.cuda(0)
+
+            # data, target = data.cuda(0), target.cuda(0)
+            # self.net.cuda(0)
             with autocast(enabled=False):
                 logits = self.model_inferer(data) ## why does it require [b, 4, w, h, d]?????
             val_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
@@ -317,7 +319,7 @@ class SpiderLitModule(LightningModule):
             self.dice_acc(y_pred=val_output_convert, y=val_labels_list)
             # print(self.dice_acc(y_pred=val_output_convert, y=val_labels_list))
             acc, not_nans = self.dice_acc.aggregate()
-            acc = acc.cuda(0)
+            acc = acc.cuda()
             # print("+++++++++")
             # print(acc)
 
@@ -337,16 +339,18 @@ class SpiderLitModule(LightningModule):
 
             # print("Val Dice: Mean: {:.6g}, TC: {:.6f}, WT: {:.6f}, ET: {:.6f}".format(np.mean(self.val_acc.avg), Dice_TC, Dice_WT, Dice_ET))
 
-
+            print(self.val_acc.avg)
+            print(not_nans)
             for i in range(3):
-                self.log(self.name[i], self.val_acc.avg[i], on_step=False, on_epoch=True, prog_bar=True)
+                self.log(self.name[i], self.val_acc.val[i], on_step=False, on_epoch=True, prog_bar=True) ##val_acc.avg[i]
 
         # return run_acc.avg
-        return {'loss': loss} ##, 'Dice_TC': Dice_TC, 'Dice_WT': Dice_WT, 'Dice_ET': Dice_ET}
-
+        return {'loss': loss, 'pred': val_output_convert, 'target': target}
+    
+    @torch.no_grad()
     def on_validation_epoch_start(self) -> None:
         self.net.eval()
-        # self.val_loss.reset()
+        self.val_loss.reset()
         self.val_acc.reset()
     
     @torch.no_grad()
@@ -358,13 +362,15 @@ class SpiderLitModule(LightningModule):
         # # otherwise metric would be reset by lightning after each epoch
         # self.log("val/acc_best", self.val_acc_best.compute(), sync_dist=True, prog_bar=True)
         val_acc = self.val_acc.avg
-        semantic_classes = ["Dice_Val_TC", "Dice_Val_WT", "Dice_Val_ET"]
+        # semantic_classes = ["Dice_Val_TC", "Dice_Val_WT", "Dice_Val_ET"]
             
-        Dice_TC = val_acc[0]
-        Dice_WT = val_acc[1]
-        Dice_ET = val_acc[2]
+        # Dice_TC = val_acc[0]
+        # Dice_WT = val_acc[1]
+        # Dice_ET = val_acc[2]
 
         val_avg_acc = np.mean(val_acc)
+
+        print(f"{val_acc}, Mean: {val_avg_acc}")
         self.log("val/acc", val_avg_acc, sync_dist=True, prog_bar=True, logger=False) ##Mean Val Dice
         
         if val_avg_acc > self.val_acc_max:
@@ -374,6 +380,7 @@ class SpiderLitModule(LightningModule):
         # print(val_avg_acc)
         
 
+    @torch.no_grad()
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         """Perform a single test step on a batch of data from the test set.
 
@@ -381,7 +388,35 @@ class SpiderLitModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        pass
+        with torch.no_grad():
+            # for idx, batch in enumerate(loader):
+            data, target = batch["image"], batch["label"]
+            # data = torch.cat((data,data), dim=1)
+            # print(data.size())
+
+            # data, target = data.cuda(0), target.cuda(0)
+            # self.net.cuda(0)
+            with autocast(enabled=False):
+                logits = self.model_inferer(data) ## logits shape = [B, in_channel, D, W, H]
+            test_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
+            test_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
+            
+            test_output_convert = [self.post_pred(self.post_sigmoid(test_pred_tensor)) for test_pred_tensor in test_outputs_list]
+          
+            self.dice_acc.reset()
+            self.dice_acc(y_pred=test_output_convert, y=test_labels_list)
+            # print(self.dice_acc(y_pred=val_output_convert, y=val_labels_list))
+            acc, not_nans = self.dice_acc.aggregate()
+            acc = acc.cuda()
+
+            loss = self.criterion(logits, target)
+            # self.val_loss.update(loss, data.size(0))
+            self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+
+            # self.val_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
+
+        return {'loss': loss, 'pred': test_output_convert, 'target': target}
+
     
     def on_test_epoch_start(self) -> None:
         pass

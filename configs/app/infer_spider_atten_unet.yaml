@@ -1,0 +1,73 @@
+_target_: src.app.infer_spider.Inferer
+
+exp_name: Spider_Test
+checkpoint_path: /work/hpc/spine-segmentation/logs/train/runs/attention-unet-v2/checkpoints/epoch_271_v2.ckpt
+data_name: Spider
+
+data_loader:
+  _target_: torch.utils.data.DataLoader
+
+  dataset:
+    _target_: src.data.components.spider_dataset.SpiderTransformedDataset
+
+    dataset:
+      _target_: src.data.components.spider_dataset.SpiderDataset
+      data_dir: /data/hpc/spine/dataset/spine_nii
+      json_path: /data/hpc/spine/jsons/spine_infer_old_version.json
+
+    transform:
+      _target_: monai.transforms.Compose
+      transforms:
+        - _target_: monai.transforms.LoadImaged
+          keys: [image, label]
+          image_only: False
+          
+        - _target_: monai.transforms.EnsureChannelFirstd
+          keys: image
+        #   channel_dim: no_channel
+
+        - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
+          keys: [label]
+
+        # - _target_: monai.transforms.Resized
+        #   keys: [image, label]
+        #   spatial_size: [32, 420, 420]
+
+        - _target_: monai.transforms.Spacingd
+          keys: [image, label]
+          pixdim:  [1.7, 0.625, 0.58742571] ##${data.spider.spacing}
+          mode: 3
+
+        - _target_: monai.transforms.NormalizeIntensityd
+          keys: image
+          nonzero: True
+          channel_wise: True
+
+        - _target_: monai.transforms.ToTensord
+          keys: [image, label]
+
+  batch_size: 1
+  num_workers: 4
+  pin_memory: False
+  shuffle: False
+  collate_fn: ## can delete?
+    _target_: monai.data.utils.list_data_collate
+    _partial_: true
+
+net:
+  _target_: monai.networks.nets.AttentionUnet
+  spatial_dims: 3
+  in_channels: 1
+  out_channels: 3
+  channels: [16, 32, 64, 128, 256, 512]
+  strides: [2, 2, 2, 2, 2]
+  # use_checkpoint: true
+
+model_inferer:
+  _target_: monai.inferers.sliding_window_inference
+  _partial_: true
+  roi_size: [32, 256, 256] ##[roi_size_x, roi_size_y, roi_size_z]
+  sw_batch_size: 1 ##batch size for sliding window inference
+  overlap: 0.6 ##overlap for sliding window inference
+
+device: cuda

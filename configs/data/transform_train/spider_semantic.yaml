@@ -3,26 +3,32 @@ _target_: monai.transforms.Compose
 transforms:
   - _target_: monai.transforms.LoadImaged
     keys: [image, label]
+    # image_only: False
 
   - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
     keys: label
-  
+
   - _target_: monai.transforms.EnsureChannelFirstd
     keys: image
-    channel_dim: no_channel
+    # channel_dim: no_channel
 
-  - _target_: monai.transforms.Resized
+  - _target_: monai.transforms.Spacingd
     keys: [image, label]
-    spatial_size: [32, 420, 420]
+    pixdim:  [1.7, 0.625, 0.58742571] ##${data.spider.spacing}
+    mode: 3
+
+  # - _target_: monai.transforms.Resized
+  #   keys: [image, label]
+  #   spatial_size: [32, 420, 420]
 
   - _target_: monai.transforms.CropForegroundd
     keys: [image, label]
     source_key: image
-    k_divisible: [32, 160, 160]
+    k_divisible: 1 ##[32, 160, 160]
 
   - _target_: monai.transforms.RandSpatialCropd
     keys: [image, label]
-    roi_size: [32, 160, 160]
+    roi_size: [32, 256, 256] 
     random_size: False
 
   - _target_: monai.transforms.RandFlipd

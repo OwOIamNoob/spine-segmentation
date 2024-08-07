@@ -56,12 +56,11 @@ class ConvertToMultiChannelBasedOnSpiderClassesSemantic(Transform):
     
     def __call__(self, img:NdarrayOrTensor) -> NdarrayOrTensor:
         if img.ndim == 4 and img.shape[0] == 1:
-            img = img.squeeze(0)
-        
+            img = img.squeeze(0)      
         # result = [img == label for label in ConvertToMultiChannelBasedOnSpiderClassesSemantic.labels]
-        result = [(img == 1) | (img == 2) | (img == 3) | (img == 4) | (img == 5) | (img == 6) | (img == 7), 
-                  img == 100,
-                  (img == 201) | (img == 202) | (img == 203) | (img == 204) | (img == 205) | (img == 206) | (img == 207)]
+        result = [(img // 100 == 0) & (img > 0), 
+                  img // 100 == 1,
+                  img // 100 == 2]
         return torch.stack(result, dim=0) if isinstance(img, torch.Tensor) else np.stack(result, axis=0)    
 
 

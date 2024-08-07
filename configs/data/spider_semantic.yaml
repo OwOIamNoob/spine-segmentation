@@ -6,9 +6,11 @@ defaults:
 
 data_dir: ${paths.data_dir}/dataset/spine_nii
 json_path: ${paths.json_path}/spine_v5.json
-k: 9
+spacing: [1.7, 0.625, 0.58742571]
+
+k: 9 # pick validate fold
 split_seed: 200 # keep it constant if you want to reproduce the result
 num_splits: 10 
-batch_size: 2 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
-num_workers: 4
+batch_size: 4 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
+num_workers: 32
 pin_memory: False

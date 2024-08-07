@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 import torch
 import monai
 from monai import transforms
-from monai.data.utils import list_data_collate
+from monai.data.utils import list_data_collate, pad_list_data_collate
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, random_split
 import albumentations as A
@@ -19,6 +19,7 @@ class SpiderKFoldDataModule(LightningDataModule):
     def __init__(self,
                  data_dir = "./data",
                  json_path = "./data/a.json",
+                 spacing = [1., 1., 1.],
                  transform_train: Optional[monai.transforms.Compose] = None,
                  transform_val: Optional[monai.transforms.Compose] = None,
                  k: int = 5, # no. epoch before switching fold
@@ -54,7 +55,6 @@ class SpiderKFoldDataModule(LightningDataModule):
             self.batch_size_per_device = self.hparams.batch_size // self.trainer.world_size
 
         
-        
         if not self.data_train and not self.data_val and not self.data_test:
             dataset_full = SpiderDataset(   data_dir=self.hparams.data_dir,
                                             json_path=self.hparams.json_path)
@@ -75,24 +75,24 @@ class SpiderKFoldDataModule(LightningDataModule):
                             num_workers=self.hparams.num_workers,
                             pin_memory=self.hparams.pin_memory,
                             shuffle=True,
-                            collate_fn=list_data_collate)
+                            collate_fn=pad_list_data_collate)
         
 
     def val_dataloader(self) -> DataLoader[Any]:
         return DataLoader(dataset=self.get_transformed_dataset(self.data_val, self.hparams.transform_val), 
-                            batch_size=self.hparams.batch_size, ## 1?? I didnt know why I do that
+                            batch_size=self.hparams.batch_size, 
                             num_workers=self.hparams.num_workers,
                             pin_memory=self.hparams.pin_memory,
                             shuffle=False,
-                            collate_fn = list_data_collate)
+                            collate_fn = pad_list_data_collate)
     
     def test_dataloader(self) -> DataLoader[Any]:
         return DataLoader(dataset=self.get_transformed_dataset(self.data_val, self.hparams.transform_val), 
-                            batch_size=self.hparams.batch_size, ## 1?? I didnt know why I do that
+                            batch_size=self.hparams.batch_size, 
                             num_workers=self.hparams.num_workers,
                             pin_memory=self.hparams.pin_memory,
                             shuffle=False,
-                            collate_fn=list_data_collate)
+                            collate_fn=pad_list_data_collate)
     
     def teardown(self, stage: Optional[str] = None) -> None:
         """Lightning hook for cleaning up after `trainer.fit()`, `trainer.validate()`,
