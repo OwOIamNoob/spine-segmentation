@@ -58,6 +58,11 @@ class SpiderDataset(Dataset):
             path = os.path.join(self.data_dir, self.data[index]["image"])
             output["image"] = [path] ##, path, path, path]
         output["label"] = os.path.join(self.data_dir, self.data[index]["label"])
+        
+        # Adding border into dataset 
+        if "border" in self.data[index].keys():
+            output["border"] = os.path.join(self.data_dir, self.data[index]["border"])
+            
         return output
     
     # In case they query in list of index

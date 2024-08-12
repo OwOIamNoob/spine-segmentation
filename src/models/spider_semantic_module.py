@@ -1,6 +1,8 @@
 from typing import Any, Dict, Tuple
 
+import numpy as np
 import torch
+from torch import nn
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.accuracy import Accuracy
@@ -21,7 +23,8 @@ import shutil
 
 from functools import partial
 import wandb
-    
+
+# Manual dice score
 def dice(x, y):
     intersect = np.sum(np.sum(np.sum(x * y)))
     y_sum = np.sum(np.sum(np.sum(y)))
@@ -29,7 +32,6 @@ def dice(x, y):
         return 0.0
     x_sum = np.sum(np.sum(np.sum(x)))
     return 2 * intersect / (x_sum + y_sum)
-
 
 class AverageMeter(object):
     def __init__(self):
@@ -86,12 +88,12 @@ class SpiderLitModule(LightningModule):
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler,
         compile: bool,
-    
         sw_batch_size = 4,
         roi_x = 96,
         roi_y = 96,
         roi_z = 96,
         infer_overlap = 0.5,
+        criterion: torch.nn.modules.loss._Loss = None
         # amp = False,
     ) -> None:
         """Initialize a `SpiderLitModule`.
@@ -104,7 +106,7 @@ class SpiderLitModule(LightningModule):
 
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters(logger=False, ignore=['net', 'criterion'])
 
         self.net = net
         
@@ -124,7 +126,10 @@ class SpiderLitModule(LightningModule):
         self.val_acc_max = 0
 
         # loss function
-        self.criterion = DiceLoss(to_onehot_y=False, sigmoid=True, weight = [1, 3, 2])
+        if not criterion:
+            self.criterion = DiceLoss(to_onehot_y=False, sigmoid=True, weight = [1, 3, 2])
+        else:
+            self.criterion = criterion
 
         # metric objects for calculating and averaging accuracy across batches
         self.train_acc = AverageMeter()
@@ -202,7 +207,7 @@ class SpiderLitModule(LightningModule):
             
         with autocast(enabled=False):
             logits = self.net(data)
-            loss = self.criterion(logits, target)
+            loss = self.criterion(logits, target, weight=batch["border"] if "border" in batch.keys() else None)
                 
 
             # loss.backward()
@@ -265,6 +270,7 @@ class SpiderLitModule(LightningModule):
         """
         loss, logits, targets = self.model_step(batch)
         
+
         # update and log metrics
         self.train_loss(loss)
         # self.train_acc(preds, targets)
@@ -476,8 +482,23 @@ class SpiderLitModule(LightningModule):
         filename = os.path.join(self.trainer.log_dir, filename)
         torch.save(save_dict, filename)
         print("Saving checkpoint", filename)
+    
 
 
 if __name__ == "__main__":
+    import rootutils
+
+    rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+
     # _ = Brats21LitModule(None, None, None, None)
+    from omegaconf import DictConfig
+    import hydra
     print(1)
+    @hydra.main(version_base="1.3", config_path="../../configs", config_name="train.yaml")
+    def test(cfg: DictConfig):
+        model = hydra.utils.instantiate(cfg.model)
+        # print(cfg.data)
+        # transformed_data = datamodule.test_val_transform()
+        # print(datamodule.data_train[0])
+        # print(transformed_data[2]["border"].size())
+    test()

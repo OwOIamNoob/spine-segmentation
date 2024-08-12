@@ -43,9 +43,9 @@ class Inferer(object):
         self.data_loader = data_loader
         net.to(device)
         self.net = net
-        model = SpiderLitModule.load_from_checkpoint(checkpoint_path=checkpoint_path)
+        model = SpiderLitModule.load_from_checkpoint(checkpoint_path=checkpoint_path, strict=False)
         self.model_inferer = partial(model_inferer, predictor=model)
-        
+
 
     def feed(self):
         with torch.no_grad():
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     
     config_path = os.path.join(os.environ["PROJECT_ROOT"], "configs/app")
     
-    @hydra.main(version_base="1.3", config_path=config_path, config_name="infer_spider")
+    @hydra.main(version_base="1.3", config_path=config_path, config_name="infer_spider_atten_unet")
     def main(cfg: DictConfig):
         # print(OmegaConf.to_yaml(cfg))
         inferer: Inferer = hydra.utils.instantiate(cfg)

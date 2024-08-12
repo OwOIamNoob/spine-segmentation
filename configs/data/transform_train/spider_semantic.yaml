@@ -24,11 +24,11 @@ transforms:
   - _target_: monai.transforms.CropForegroundd
     keys: [image, label]
     source_key: image
-    k_divisible: 1 ##[32, 160, 160]
+    k_divisible: 32 ##[32, 160, 160]
 
   - _target_: monai.transforms.RandSpatialCropd
     keys: [image, label]
-    roi_size: [32, 256, 256] 
+    roi_size: [32, 288, 288] 
     random_size: False
 
   - _target_: monai.transforms.RandFlipd

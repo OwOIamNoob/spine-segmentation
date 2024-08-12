@@ -136,8 +136,8 @@ if __name__=="__main__":
         dataloader = datamodule.train_dataloader()
         batch = next(iter(dataloader))
         print(batch.keys())
-        print(type(batch["image"]), type(batch["label"]))
-        print(batch["label"].size())
+        print(type(batch["image"]), type(batch["label"]), type(batch["border"]))
+        print(batch["image"].size(), batch["label"].size(), batch["border"].size())
 
     @hydra.main(version_base="1.3", config_path="../../configs", config_name="train.yaml")
     def test(cfg: DictConfig):
@@ -146,7 +146,7 @@ if __name__=="__main__":
         datamodule.setup()
         transformed_data = datamodule.test_val_transform()
         print(datamodule.data_train[0])
-        print(transformed_data[2]["image"].size())
+        print(transformed_data[2]["border"].size())
 
     # main()
-    test()
+    main()
