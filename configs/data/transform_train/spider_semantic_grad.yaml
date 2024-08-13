@@ -7,6 +7,7 @@ transforms:
 
   - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
     keys: label
+    include_background: False
 
   - _target_: monai.transforms.EnsureChannelFirstd
     keys: [image, border]
@@ -30,9 +31,9 @@ transforms:
     keys: [image, label, border]
     prob: 0.15
     rotate_range: [[-0.1, 0.1], [-0.3, 0.3], [-0.3, 0.3]]
-    scale_range:  [[-0.05, 0.1], [-0.1, 0.15], [-0.1, 0.1]]
+    scale_range:  [[-0.05, 0.1], [-0.08, 0.08], [-0.05, 0.05]]
     padding_mode: zeros
-    mode: ['bilinear', 'nearest', 'nearest']
+    mode: ['bilinear', 'nearest', 'bilinear']
 
   - _target_: monai.transforms.RandSpatialCropd
     keys: [image, label, border]

@@ -208,19 +208,15 @@ class SpatialWeightedDiceCELoss(_Loss):
         # print(ce_loss.size())
         if weight is not None: 
             ce_loss = ce_loss * weight
-        
-        #Handling reduction
-        ce_loss = torch.sum(ce_loss[:, None, ...], dim=reduce_axis)
+            ce_loss = torch.mean(ce_loss, dim=reduce_axis)
+        else:
+            ce_loss = torch.mean(ce_loss[:, None, ...], dim=reduce_axis)
 
-        if self.reduction == LossReduction.MEAN.value:
+        # Forge batch 
+        if self.reduction == "mean":
             ce_loss = torch.mean(ce_loss)  # the batch and channel average
-        elif self.reduction == LossReduction.SUM.value:
+        elif self.reduction == "sum":
             ce_loss = torch.sum(ce_loss)  # sum over the batch and channel dims
-        elif self.reduction == LossReduction.NONE.value:
-            # If we are not computing voxelwise loss components at least
-            # make sure a none reduction maintains a broadcastable shape
-            broadcast_shape = list(ce_loss.shape[0:2]) + [1] * (len(input.shape) - 2)
-            f = f.view(ce_loss)
         else:
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
 

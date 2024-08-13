@@ -44,3 +44,5 @@ criterion:
     _target_: torch.Tensor
     data: [1, 1.5, 1.2]
   reduction: mean
+
+name: ["Vertebrae", "Spinal Canal", "Disk"]

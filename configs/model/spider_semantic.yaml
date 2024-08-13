@@ -37,3 +37,5 @@ criterion:
   _target_: monai.losses.DiceLoss
   softmax: True
   weight: [1, 3, 2]
+
+name: ["Vertebrae", "Spinal Canal", "Disk"]

@@ -23,7 +23,7 @@ import wandb
 import nibabel as nib
 
 class WandbCallback(Callback):
-    def __init__(self):
+    def __init__(self, labels, ignore=[]):
         self.images = []
         self.captions = []
         self.table = wandb.Table(
@@ -33,6 +33,8 @@ class WandbCallback(Callback):
                 "Image-Channel"
             ]
         )
+        self.labels = labels
+        self.ignore = ignore
 
     def setup(self, trainer, pl_module, stage):
         self.logger = trainer.logger
@@ -42,6 +44,8 @@ class WandbCallback(Callback):
         if not os.path.exists(self.save_folder):
             os.makedirs(self.save_folder)
 
+
+    # This function is to merge image and convert it to RGB image.
     def merge_image(self, vertebral_img, disk_img = 0, canal_img = 0):
         if isinstance(canal_img, int) == False:
             canal_img = np.stack([canal_img, np.zeros(canal_img.shape), canal_img], axis = -1)
@@ -57,6 +61,7 @@ class WandbCallback(Callback):
 
         return vertebral_img
 
+    # This function is to get the image in \output (for example /work/hpc/spine-segmentation/outputs/images5_t2.png)
     def visualize(self, predict_seg, img_name = None, save_path = None):
         # coronal_view = zoom(np.sum(predict_seg, axis=2).transpose(0, 2, 1), (1, 1, (predict_seg.shape[2]/predict_seg.shape[1]/6)) ## We need to zoom because the space of images is not the same
         coronal_view = torch.sum(predict_seg, dim=2).permute(0, 2, 1)
@@ -70,8 +75,9 @@ class WandbCallback(Callback):
         ## coronal_view[0] is the vertebral, coronal_view[1] is the disk, coronal_view[2] is the canal
         ## sagittal_view[0] is the vertebral, sagittal_view[1] is the disk, sagittal_view[2] is the canal
 
-        image1 = self.merge_image(coronal_view[0], coronal_view[2])
-        image2 = self.merge_image(sagittal_view[0], sagittal_view[2], sagittal_view[1])
+        image1 = self.merge_image(coronal_view[0], coronal_view[2]) ## merge vertebral and canal in coronal view
+        image2 = self.merge_image(sagittal_view[0], sagittal_view[2], sagittal_view[1]) ## merge vertebral, canal and disk in sagittal view
+
         coronal_view_0 = self.merge_image(coronal_view[0])
         coronal_view_2 = self.merge_image(coronal_view[2])
         sagittal_view_0 = self.merge_image(sagittal_view[0])
@@ -95,6 +101,29 @@ class WandbCallback(Callback):
         self.captions.append(img_name)
 
         # self.logger.log_image(key='Visualize', images=[image_all], caption=[img_name])
+    
+    # Abstracted mask building.
+    def build_mask(pred, label, slice_idx):
+        output = {}
+        i = 1 
+        # Log format for both predictions and labels. 
+        #         "Pred: Vertebral": {    
+        #     "mask_data": sample_pred[1, slice_idx, :, :],
+        #     "class_labels": {1: "Pred: Vertebral"},
+        # }
+        for index in range(len(self.labels)):
+            if index in self.ignore:
+                continue 
+            pred_entry = {f"Pred: {self.labels[index]}" : { "mask_data": pred[index, slice_idx, :, :] * i,
+                                                            "class_labels": {i : f"Pred: {self.labels[index]}"}
+                                                            }}
+            gt_entry =  {f"GT: {self.labels[index]}" : { "mask_data": label[index, slice_idx, :, :] * (i + 1),
+                                                            "class_labels": {i + 1 : f"GT: {self.labels[index]}"}
+                                                            }}
+            output.update([pred_entry, gt_entry])
+            i += 2
+
+        return output
 
     def log_data_samples_into_tables(
         self,
@@ -118,34 +147,7 @@ class WandbCallback(Callback):
                 ground_truth_wandb_images.append(
                     wandb.Image(
                         sample_image[channel_idx, slice_idx, :, :],
-                        masks={
-                            "Pred: Vertebral": {    
-                                "mask_data": sample_pred[0, slice_idx, :, :],
-                                "class_labels": {1: "Pred: Vertebral"},
-                            },
-                            "GT: Vertebral": {    
-                                "mask_data": sample_label[0, slice_idx, :, :] * 2,
-                                "class_labels": {2: "GT: Vertebral"},
-                            },
-
-                            "Pred: Canal": {
-                                "mask_data": sample_pred[1, slice_idx, :, :] * 3,
-                                "class_labels": {3: "Pred: Canal"},
-                            },
-                            "GT: Canal": {
-                                "mask_data": sample_label[1, slice_idx, :, :] * 4,
-                                "class_labels": {4: "GT: Canal"},
-                            },
-                            
-                            "Pred: Disk": {
-                                "mask_data": sample_pred[2, slice_idx, :, :] * 5,
-                                "class_labels": {5: "Pred: Disk"},
-                            },
-                            "GT: Disk": {
-                                "mask_data": sample_label[2, slice_idx, :, :] * 6,
-                                "class_labels": {6: "GT: Disk"},
-                            },
-                        },
+                        masks= self.build_mask(sample_pred, sample_label, slice_idx),
                     )
                 )
             table.add_data(image_name, slice_idx, *ground_truth_wandb_images)

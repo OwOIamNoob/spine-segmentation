@@ -6,6 +6,7 @@ transforms:
     
   - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
     keys: [label]
+    include_background: False
 
   - _target_: monai.transforms.EnsureChannelFirstd
     keys: image
@@ -16,11 +17,6 @@ transforms:
     pixdim:  [1.75, 0.625, 0.58742571] #${data.spider.spacing}
     mode: 3
 
-  # - _target_: monai.transforms.Resized
-  #   keys: [image, label]
-  #   spatial_size: [32, 420, 420]
-  #   size_mode: all
-
   - _target_: monai.transforms.NormalizeIntensityd
     keys: image
     nonzero: True
@@ -29,12 +25,3 @@ transforms:
   - _target_: monai.transforms.ToTensord
     keys: [image, label]
 
-  
-# val_transform = transforms.Compose(
-#         [
-#             transforms.LoadImaged(keys=["image", "label"]),
-#             transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys=["label"]),
-#             transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-#             transforms.ToTensord(keys=["image", "label"]),
-#         ]
-#     )s

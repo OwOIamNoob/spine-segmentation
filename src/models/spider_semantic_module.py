@@ -93,7 +93,8 @@ class SpiderLitModule(LightningModule):
         roi_y = 96,
         roi_z = 96,
         infer_overlap = 0.5,
-        criterion: torch.nn.modules.loss._Loss = None
+        criterion: torch.nn.modules.loss._Loss = None,
+        name=None
         # amp = False,
     ) -> None:
         """Initialize a `SpiderLitModule`.
@@ -120,7 +121,7 @@ class SpiderLitModule(LightningModule):
         )
         
         self.dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN_BATCH, get_not_nans=True)
-        self.post_sigmoid = Activations(sigmoid=True)
+        self.post_activation = Activations(softmax=True)
         self.post_pred = AsDiscrete(argmax=False, threshold=0.5)
         
         self.val_acc_max = 0
@@ -144,7 +145,10 @@ class SpiderLitModule(LightningModule):
         # for tracking best so far validation accuracy
         self.val_acc_best = MaxMetric()
 
-        self.name = ["Lumbar vertebra", "Spinal canal", "Disk"]
+        if not name:
+            self.name = ["None", "Lumbar vertebra", "Spinal canal", "Disk"]
+        else: 
+            self.name = name  
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`.
@@ -208,54 +212,7 @@ class SpiderLitModule(LightningModule):
         with autocast(enabled=False):
             logits = self.net(data)
             loss = self.criterion(logits, target, weight=batch["border"] if "border" in batch.keys() else None)
-                
-
-            # loss.backward()
-            # optimizer.step()
-            
-            # self.train_loss.update(loss.item(), n=args.batch_size)
-            # if args.rank == 0:
-            #     print(
-            #         "Epoch {}/{} {}/{}".format(epoch, args.max_epochs, idx, len(loader)),
-            #         "loss: {:.4f}".format(self.train_loss.avg),
-            #         "time {:.2f}s".format(time.time() - start_time),
-                
-        #     start_time = time.time()
-        # for param in model.parameters():
-        #     param.grad = None
-        # return self.train_loss.avg
-        
-        # with torch.no_grad(): # ????
-        #     # for idx, batch in enumerate(loader):
-        #     data, target = batch["image"], batch["label"]
-        #     data, target = data.cuda(0), target.cuda(0)
-        #     with autocast(enabled=False):
-        #         logits = self.model_inferer(data)
-        #     train_labels_list = decollate_batch(target) ## Optimal to use decollate_batch
-        #     train_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch
-        #     train_output_convert = [self.post_pred(self.post_sigmoid(val_pred_tensor)) for val_pred_tensor in train_outputs_list]
-        #     self.dice_acc.reset()
-        #     self.dice_acc(y_pred=train_output_convert, y=train_labels_list)
-        #     acc, not_nans = self.dice_acc.aggregate()
-        #     acc = acc.cuda(0)
-
-        #     self.train_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
-            
-        #     Dice_TC = self.train_acc.avg[0]
-        #     Dice_WT = self.train_acc.avg[1]
-        #     Dice_ET = self.train_acc.avg[2]
-
-        #     # loss = self.criterion(logits, target)
-            
-        #     # self.val_loss.update(loss, data.size(0))
-        #     # self.log("train/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        #     # self.log("val/acc", np.mean(self.val_acc.avg) , on_step=False, on_epoch=True, prog_bar=False, logger=False) ##Mean Val Dice
-        #     # self.log("val/acc_best", np.mean(self.val_acc.avg), sync_dist=True, prog_bar=True)
-        #     self.log("train/Dice_TC", Dice_TC, on_step=False, on_epoch=True, prog_bar=True)
-        #     self.log("train/Dice_WT", Dice_WT, on_step=False, on_epoch=True, prog_bar=True)
-        #     self.log("train/Dice_ET", Dice_ET, on_step=False, on_epoch=True, prog_bar=True)
-        #     print("Dice_Train_Mean: {:.6f}".format(np.mean(self.train_acc.avg)))
-        
+        # *Place holder for archived code id 1*
         return loss, logits, target
 
     def training_step(
@@ -273,8 +230,7 @@ class SpiderLitModule(LightningModule):
 
         # update and log metrics
         self.train_loss(loss)
-        # self.train_acc(preds, targets)
-        self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train/loss", self.train_loss, on_step=True, on_epoch=True, prog_bar=True)
         # self.log("train/acc", self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
 
         # return loss or backpropagation will fail
@@ -288,66 +244,31 @@ class SpiderLitModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        # loss, logits, targets = self.model_step(batch)
-
-        # update and log metrics
-        # self.val_loss(loss)
-        # self.val_acc(preds, targets)
-        # self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
-        # self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
-        
-        # self.net.eval()
-        # start_time = time.time()
-        # run_acc = AverageMeter()
+        # ////Placeholder for archived code id 2////
 
         with torch.no_grad():
-            # for idx, batch in enumerate(loader):
             data, target = batch["image"], batch["label"]
-            # data = torch.cat((data,data), dim=1)
-            # print(data.size())
-
-            # data, target = data.cuda(0), target.cuda(0)
-            # self.net.cuda(0)
+            
             with autocast(enabled=False):
                 logits = self.model_inferer(data) ## why does it require [b, 4, w, h, d]?????
             val_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
             val_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
-            
-            # print(logits.shape)
-            # print(logits)
-    
-            # print(type(val_outputs_list))
-            # print(len(val_outputs_list))
-            val_output_convert = [self.post_pred(self.post_sigmoid(val_pred_tensor)) for val_pred_tensor in val_outputs_list]
-            # print("++++++++++++++++++++++++++")
-            # print(val_output_convert)
+            val_output_convert = [self.post_pred(self.post_activation(val_pred_tensor)) for val_pred_tensor in val_outputs_list]
             self.dice_acc.reset()
             self.dice_acc(y_pred=val_output_convert, y=val_labels_list)
             # print(self.dice_acc(y_pred=val_output_convert, y=val_labels_list))
             acc, not_nans = self.dice_acc.aggregate()
             acc = acc.cuda()
-            # print("+++++++++")
-            # print(acc)
 
             loss = self.criterion(logits, target)
             self.val_loss.update(loss, data.size(0))
             self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
             self.val_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
-            # Dice_TC = self.val_acc.avg[0]
-            # Dice_WT = self.val_acc.avg[1]
-            # Dice_ET = self.val_acc.avg[2]
-            # # self.log("val/acc", np.mean(self.val_acc.avg) , on_step=False, on_epoch=True, prog_bar=False, logger=False) ##Mean Val Dice
-            # # self.log("val/acc_best", np.mean(self.val_acc.avg), sync_dist=True, prog_bar=True)
-            # self.log("val/Dice_TC", Dice_TC, on_step=False, on_epoch=True, prog_bar=True)
-            # self.log("val/Dice_WT", Dice_WT, on_step=False, on_epoch=True, prog_bar=True)
-            # self.log("val/Dice_ET", Dice_ET, on_step=False, on_epoch=True, prog_bar=True)
-
-            # print("Val Dice: Mean: {:.6g}, TC: {:.6f}, WT: {:.6f}, ET: {:.6f}".format(np.mean(self.val_acc.avg), Dice_TC, Dice_WT, Dice_ET))
-
+            # Placeholder for archived code id 3
             print(self.val_acc.avg)
             print(not_nans)
-            for i in range(3):
+            for i in range(len(self.name)):
                 self.log(self.name[i], self.val_acc.val[i], on_step=False, on_epoch=True, prog_bar=True) ##val_acc.avg[i]
 
         # return run_acc.avg
@@ -395,19 +316,13 @@ class SpiderLitModule(LightningModule):
         :param batch_idx: The index of the current batch.
         """
         with torch.no_grad():
-            # for idx, batch in enumerate(loader):
             data, target = batch["image"], batch["label"]
-            # data = torch.cat((data,data), dim=1)
-            # print(data.size())
-
-            # data, target = data.cuda(0), target.cuda(0)
-            # self.net.cuda(0)
             with autocast(enabled=False):
                 logits = self.model_inferer(data) ## logits shape = [B, in_channel, D, W, H]
             test_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
             test_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
             
-            test_output_convert = [self.post_pred(self.post_sigmoid(test_pred_tensor)) for test_pred_tensor in test_outputs_list]
+            test_output_convert = [self.post_pred(self.post_activation(test_pred_tensor)) for test_pred_tensor in test_outputs_list]
           
             self.dice_acc.reset()
             self.dice_acc(y_pred=test_output_convert, y=test_labels_list)
@@ -419,7 +334,6 @@ class SpiderLitModule(LightningModule):
             # self.val_loss.update(loss, data.size(0))
             self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
-            # self.val_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
 
         return {'loss': loss, 'pred': test_output_convert, 'target': target}
 
@@ -490,15 +404,10 @@ if __name__ == "__main__":
 
     rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-    # _ = Brats21LitModule(None, None, None, None)
     from omegaconf import DictConfig
     import hydra
     print(1)
     @hydra.main(version_base="1.3", config_path="../../configs", config_name="train.yaml")
     def test(cfg: DictConfig):
         model = hydra.utils.instantiate(cfg.model)
-        # print(cfg.data)
-        # transformed_data = datamodule.test_val_transform()
-        # print(datamodule.data_train[0])
-        # print(transformed_data[2]["border"].size())
     test()
