@@ -6,7 +6,7 @@ transforms:
     
   - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
     keys: [label]
-    include_background: False
+    include_background: ${data.include_background}
 
   - _target_: monai.transforms.EnsureChannelFirstd
     keys: image
@@ -15,7 +15,7 @@ transforms:
   - _target_: monai.transforms.Spacingd
     keys: [image, label]
     pixdim:  [1.75, 0.625, 0.58742571] #${data.spider.spacing}
-    mode: 3
+    mode: [3, 'nearest']
 
   - _target_: monai.transforms.NormalizeIntensityd
     keys: image

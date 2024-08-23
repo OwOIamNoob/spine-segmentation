@@ -1,4 +1,4 @@
 wandb_callback:
   _target_: src.utils.callback.wandb.WandbCallback
-  labels: ["Vertebrae", "Spinal Canal", "Disk"]
+  labels: ${model.name}
   ignore: []

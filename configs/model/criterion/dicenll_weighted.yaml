@@ -1,0 +1,11 @@
+_target_: src.models.components.losses.dicenll.SpatialWeightedDiceNLLoss
+include_background: True
+softmax: False
+sigmoid: True 
+lambda_dice: 0.5
+lambda_nll: 0.5
+weight: 
+  _target_: torch.Tensor
+  data: [1, 1.5, 1.2]
+reduction: mean
+spatial_dice: True

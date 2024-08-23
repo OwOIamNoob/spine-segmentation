@@ -1,16 +1,18 @@
 _target_: src.data.spider_datamodule.SpiderKFoldDataModule
 
 defaults:
-  - transform_train: spider_semantic_grad.yaml
-  - transform_val: spider_semantic.yaml
+  - transform_train: spider_semantic
+  - transform_val: spider_semantic
 
 data_dir: ${paths.data_dir}/dataset/spine_nii
-json_path: ${paths.json_path}/spine_grad.json
+json_path: ${paths.json_path}/spine_v5.json
 spacing: [1.7, 0.625, 0.58742571]
 
 k: 9 # pick validate fold
 split_seed: 200 # keep it constant if you want to reproduce the result
 num_splits: 10 
-batch_size: 4 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
+batch_size: 2 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
 num_workers: 32
 pin_memory: False
+
+include_background: True

@@ -23,6 +23,7 @@ import shutil
 
 from functools import partial
 import wandb
+import inspect 
 
 # Manual dice score
 def dice(x, y):
@@ -107,7 +108,7 @@ class SpiderLitModule(LightningModule):
 
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
-        self.save_hyperparameters(logger=False, ignore=['net', 'criterion'])
+        self.save_hyperparameters(logger=False, ignore=['net'])
 
         self.net = net
         
@@ -211,7 +212,7 @@ class SpiderLitModule(LightningModule):
             
         with autocast(enabled=False):
             logits = self.net(data)
-            loss = self.criterion(logits, target, weight=batch["border"] if "border" in batch.keys() else None)
+            loss = self.criterion(logits, target)
         # *Place holder for archived code id 1*
         return loss, logits, target
 
@@ -227,7 +228,6 @@ class SpiderLitModule(LightningModule):
         """
         loss, logits, targets = self.model_step(batch)
         
-
         # update and log metrics
         self.train_loss(loss)
         self.log("train/loss", self.train_loss, on_step=True, on_epoch=True, prog_bar=True)
@@ -235,6 +235,13 @@ class SpiderLitModule(LightningModule):
 
         # return loss or backpropagation will fail
         return loss
+
+    # Try to update step related components
+    def on_after_backward(self):
+        try:
+            self.criterion.update()
+        except: 
+            pass
 
     @torch.no_grad()
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:

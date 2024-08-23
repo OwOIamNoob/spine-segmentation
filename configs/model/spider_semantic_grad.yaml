@@ -3,21 +3,13 @@ _target_: src.models.spider_semantic_module.SpiderLitModule
 defaults:
   - optimizer: adam
   - scheduler: warmup_cosine
-
-# net:
-#   _target_: monai.networks.nets.SwinUNETR
-#   img_size: [32, 192, 192] ## patch size
-#   in_channels: 1
-#   out_channels: 3
-#   feature_size: 36 ##48
-#   use_checkpoint: null
-
+  - criterion: dicece_weighted
 
 net:
   _target_: monai.networks.nets.AttentionUnet
   spatial_dims: 3
   in_channels: 1
-  out_channels: 3
+  out_channels: 4
   channels: [16, 32, 64, 128, 256, 512]
   strides: [2, 2, 2, 2, 2]
   dropout: 0.3
@@ -30,19 +22,8 @@ sw_batch_size: 4
 roi_x: 32
 roi_y: 288 #160
 roi_z: 288
-infer_overlap: 0.5
+infer_overlap: 0.75
 
 # For criterion and metrics configuration
- 
-# Loss can be found here src/models/components/losses/dicece.py
-criterion: 
-  _target_: src.models.components.losses.dicece.SpatialWeightedDiceCELoss
-  softmax: True
-  lambda_dice: 0.6
-  lambda_ce: 0.4
-  weight: 
-    _target_: torch.Tensor
-    data: [1, 1.5, 1.2]
-  reduction: mean
-
-name: ["Vertebrae", "Spinal Canal", "Disk"]
+name: ["None", "Vertebrae", "Canal", "Disk"]
+# Background is ignored

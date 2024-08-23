@@ -7,7 +7,7 @@ transforms:
 
   - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
     keys: label
-    include_background: False
+    include_background: ${data.include_background}
 
   - _target_: monai.transforms.EnsureChannelFirstd
     keys: [image, border]
@@ -16,24 +16,18 @@ transforms:
   - _target_: monai.transforms.Spacingd
     keys: [image, label, border]
     pixdim:  [1.7, 0.625, 0.58742571] ##${data.spider.spacing}
-    mode: 3
+    mode: [3, 'nearest', 'bilinear']
 
   # - _target_: monai.transforms.Resized
   #   keys: [image, label]
   #   spatial_size: [32, 420, 420]
-
-  - _target_: monai.transforms.CropForegroundd
-    keys: [image, label, border]
-    source_key: image
-    k_divisible: 32 ##[32, 160, 160]
-
   - _target_: monai.transforms.RandAffined
     keys: [image, label, border]
     prob: 0.15
     rotate_range: [[-0.1, 0.1], [-0.3, 0.3], [-0.3, 0.3]]
     scale_range:  [[-0.05, 0.1], [-0.08, 0.08], [-0.05, 0.05]]
     padding_mode: zeros
-    mode: ['bilinear', 'nearest', 'bilinear']
+    mode: [3, 'nearest', 'bilinear']
 
   - _target_: monai.transforms.RandSpatialCropd
     keys: [image, label, border]

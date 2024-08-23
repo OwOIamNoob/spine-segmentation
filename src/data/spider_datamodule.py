@@ -28,6 +28,7 @@ class SpiderKFoldDataModule(LightningDataModule):
                  batch_size: int = 16, 
                  num_workers: int = 8,
                  pin_memory: bool = False,
+                 include_background: bool = False
                 ):
         super().__init__()
         self.save_hyperparameters(logger=False)

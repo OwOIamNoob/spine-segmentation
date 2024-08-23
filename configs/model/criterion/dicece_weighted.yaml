@@ -1,0 +1,25 @@
+_target_: src.models.components.losses.dicece.DistanceMapDiceCELoss
+include_background: True
+softmax: True
+sigmoid: False
+
+gradient_kernel: 5
+gradient_mode: cross
+gaussian_kernel_size: 21
+gaussian_delta: [4., 10., 10.] # Follows base spacing of image
+dim: 3
+num_classes: ${model.net.out_channels}
+
+lambda_dice: 0.5
+lambda_ce: 0.5
+
+reduction: mean
+
+weight: 
+  _target_: torch.Tensor
+  data: [0.5, 1., 1.2, 1.5]
+
+annealing: 0.002
+start_step: 10000
+end_step: 50000
+step: 100

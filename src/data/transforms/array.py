@@ -65,7 +65,7 @@ class ConvertToMultiChannelBasedOnSpiderClassesSemantic(Transform):
         result = [(img // 100 == 0) & (img > 0), 
                   img // 100 == 1,
                   img // 100 == 2]
-        if self.include_background:
+        if self.include_background is True:
             result = [img == 0] + result
         
         return torch.stack(result, dim=0) if isinstance(img, torch.Tensor) else np.stack(result, axis=0)    

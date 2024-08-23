@@ -29,7 +29,7 @@ from monai.utils import DiceCEReduction, LossReduction, Weight, deprecated_arg, 
 
 # Implementation of spatial-weighted Dice Loss, reference from monai DiceLoss module
 # https://github.com/Project-MONAI/MONAI/blob/59a7211070538586369afd4a01eca0a7fe2e742e/monai/losses/dice.py#L225
-class DiceLoss(_Loss):
+class SpatialWeightedDiceLoss(_Loss):
     """
     Compute average Dice loss between two tensors. It can support both multi-classes and multi-labels tasks.
     The data `input` (BNHW[D] where N is number of classes) is compared with ground truth `target` (BNHW[D]).
@@ -115,9 +115,11 @@ class DiceLoss(_Loss):
         self.batch = batch
         weight = torch.as_tensor(weight) if weight is not None else None
         self.register_buffer("class_weight", weight)
-        self.class_weight: None | torch.Tensor
+        self.class_weight: None | torch.Tensor = weight
 
-    def forward(self, input: torch.Tensor, target: torch.Tensor, weights=None) -> torch.Tensor:
+
+
+    def forward(self, input: torch.Tensor, target: torch.Tensor, weights=None, return_logits=False) -> torch.Tensor:
         """
         Args:
             input: the shape should be BNH[WD], where N is the number of classes.
@@ -176,38 +178,24 @@ class DiceLoss(_Loss):
             # reducing spatial dimensions and batch
             reduce_axis = [0] + reduce_axis
         
-        if not weights:
-            intersection = torch.sum(target * input, dim=reduce_axis)
+        intersection = torch.sum(target * input, dim=reduce_axis)
 
-            if self.squared_pred:
-                ground_o = torch.sum(target**2, dim=reduce_axis)
-                pred_o = torch.sum(input**2, dim=reduce_axis)
-            else:
-                ground_o = torch.sum(target, dim=reduce_axis)
-                pred_o = torch.sum(input, dim=reduce_axis)
-
-            denominator = ground_o + pred_o
-
-            if self.jaccard:
-                denominator = 2.0 * (denominator - intersection)
-
-            f: torch.Tensor = 1.0 - (2.0 * intersection + self.smooth_nr) / (denominator + self.smooth_dr) 
-        # Implementation of weighted loss
+        if self.squared_pred:
+            ground_o = torch.sum(target**2, dim=reduce_axis)
+            pred_o = torch.sum(input**2, dim=reduce_axis)
         else:
-            numerator = torch.sum((input + target - 2 * input * target) * weights, dim=reduce_axis)
-            
-            if self.squared_pred:
-                ground_o = torch.sum(target**2, dim=reduce_axis)
-                pred_o = torch.sum(input**2, dim=reduce_axis)
-            else:
-                ground_o = torch.sum(target, dim=reduce_axis)
-                pred_o = torch.sum(input, dim=reduce_axis)
+            ground_o = torch.sum(target, dim=reduce_axis)
+            pred_o = torch.sum(input, dim=reduce_axis)
+        
 
-            denominator = ground_o + pred_o
-            if self.jaccard:
-                denominator = 2.0 * (denominator - intersection)
-            f: torch.Tensor = (numerator + self.smooth_nr) / (denominator + self.smooth_dr)
 
+        denominator = ground_o + pred_o
+
+        if self.jaccard:
+            denominator = 2.0 * (denominator - intersection)
+
+        f: torch.Tensor = 1.0 - (2.0 * intersection + self.smooth_nr) / (denominator + self.smooth_dr) 
+        
         num_of_classes = target.shape[1]
         if self.class_weight is not None and num_of_classes != 1:
             # make sure the lengths of weights are equal to the number of classes
@@ -236,5 +224,9 @@ class DiceLoss(_Loss):
             f = f.view(broadcast_shape)
         else:
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
+        
+        # For other loss support 
+        if return_logits is True:
+            return f, input
 
         return f

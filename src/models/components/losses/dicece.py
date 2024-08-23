@@ -26,8 +26,13 @@ from monai.losses.spatial_mask import MaskedLoss
 from monai.networks import one_hot
 from monai.utils import DiceCEReduction, LossReduction, Weight, deprecated_arg, look_up_option, pytorch_after
 
+### Local module import
+import rootutils
+rootutils.setup_root("/work/hpc/spine-segmentation", indicator="setup.py", pythonpath=True)
 
-class SpatialWeightedDiceCELoss(_Loss):
+from src.models.components.losses.dicedtm import DistanceMapDiceLoss
+
+class DistanceMapDiceCELoss(_Loss):
     """
     Compute both Dice loss and Cross Entropy Loss, and return the weighted sum of these two losses.
     The details of Dice loss is shown in ``monai.losses.DiceLoss``.
@@ -53,10 +58,19 @@ class SpatialWeightedDiceCELoss(_Loss):
         smooth_nr: float = 1e-5,
         smooth_dr: float = 1e-5,
         batch: bool = False,
-        ce_weight: torch.Tensor | None = None,
-        weight: torch.Tensor | None = None,
+        gradient_kernel: int = 3,
+        gradient_mode: str = "cross",
+        gaussian_kernel_size: int = 7,
+        gaussian_delta: float = 1.5,
+        dim: int = 3,
+        num_classes: int = 3,
         lambda_dice: float = 1.0,
-        lambda_ce: float = 1.0
+        lambda_ce: float = 1.0,
+        weight: torch.Tensor | None | list = None,
+        annealing: float = 0.002,
+        start_step: int = 10000,
+        end_step: int = 50000,
+        step: int = 100
     ) -> None:
         """
         Args:
@@ -99,13 +113,8 @@ class SpatialWeightedDiceCELoss(_Loss):
         """
         super().__init__()
         reduction = reduction
-        weight = ce_weight if ce_weight is not None else weight
-        dice_weight: torch.Tensor | None
-        if weight is not None and not include_background:
-            dice_weight = weight[1:]
-        else:
-            dice_weight = weight
-        self.dice = DiceLoss(
+
+        self.dice = DistanceMapDiceLoss(
             include_background=include_background,
             to_onehot_y=to_onehot_y,
             sigmoid=sigmoid,
@@ -117,12 +126,24 @@ class SpatialWeightedDiceCELoss(_Loss):
             smooth_nr=smooth_nr,
             smooth_dr=smooth_dr,
             batch=batch,
-            weight=dice_weight,
+            gradient_kernel=gradient_kernel,
+            gradient_mode=gradient_mode,
+            gaussian_kernel_size=gaussian_kernel_size,
+            gaussian_delta=gaussian_delta,
+            dim=dim,
+            num_classes=num_classes,
+            weight=weight,
+            annealing=annealing,
+            start_step=start_step,
+            end_step=end_step,
+            step=step
         )
 
+
         # Entropy loss will be fused manually. 
-        self.cross_entropy = nn.CrossEntropyLoss(weight=weight, reduction='none')
-        self.binary_cross_entropy = nn.BCEWithLogitsLoss(pos_weight=weight, reduction='none')
+        self.include_background = include_background
+        self.cross_entropy = nn.CrossEntropyLoss(reduction='none', ignore_index=0 if not include_background else -100)
+        self.binary_cross_entropy = nn.BCELoss(reduction='none')
         
         if lambda_dice < 0.0:
             raise ValueError("lambda_dice should be no less than 0.0.")
@@ -135,6 +156,8 @@ class SpatialWeightedDiceCELoss(_Loss):
 
         #DiceLoss configuration
         self.batch = batch
+        self.class_weight = weight
+        print(self.class_weight)
 
     def ce(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """
@@ -168,7 +191,7 @@ class SpatialWeightedDiceCELoss(_Loss):
 
         return self.binary_cross_entropy(input, target)  # type: ignore[no-any-return]
 
-    def forward(self, input: torch.Tensor, target: torch.Tensor, weight: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """
         Args:
             input: the shape should be BNH[WD].
@@ -203,15 +226,25 @@ class SpatialWeightedDiceCELoss(_Loss):
             reduce_axis = [0] + reduce_axis
         
         # Loss forwarding
-        dice_loss = self.dice(input, target)
-        ce_loss = self.ce(input, target) if input.shape[1] != 1 else self.bce(input, target)
+        dice_loss, input, spatial_weight = self.dice(input, target, export_input=True, export_weight=True)
+        
+        # To match dice format of tensor
+        if not self.include_background:
+            target = target[:, 1:]
+        
+        ce_loss = self.bce(input, target)        
         # print(ce_loss.size())
-        if weight is not None: 
-            ce_loss = ce_loss * weight
+        ce_loss *= spatial_weight
+        # Mean
+        if self.class_weight is not None: 
+            # print
+            # assert self.class_weight.shape == ce_loss.shape[1], "Weight of class must be matched to loss shape, found {self.class_weight.shape} for weight and {ce_loss.shape[1]} for loss"
+            ce_loss = ce_loss * self.class_weight[:, None, None, None].to(input)
             ce_loss = torch.mean(ce_loss, dim=reduce_axis)
         else:
             ce_loss = torch.mean(ce_loss[:, None, ...], dim=reduce_axis)
 
+        
         # Forge batch 
         if self.reduction == "mean":
             ce_loss = torch.mean(ce_loss)  # the batch and channel average
@@ -220,7 +253,64 @@ class SpatialWeightedDiceCELoss(_Loss):
         else:
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
 
+        # print("Dice_loss", dice_loss, "CE Loss", ce_loss)
         total_loss: torch.Tensor = self.lambda_dice * dice_loss + self.lambda_ce * ce_loss
 
         return total_loss
+    
+    def update(self):
+        self.dice.update()
+
+if __name__ == "__main__":
+
+    from omegaconf import DictConfig
+    import hydra
+    from copy import deepcopy
+    import SimpleITK as sitk
+    import monai
+    # print(1)
+
+    @hydra.main(version_base="1.3", config_path="../../../../configs", config_name="train.yaml")
+    def test(cfg: DictConfig):
+        criterion = DistanceMapDiceCELoss(gradient_kernel=7, gaussian_kernel_size=17, gaussian_delta=[4., 8., 8.], num_classes=4, weight=torch.Tensor([0.5, 1., 1., 1.]))
+        # weight = deepcopy(criterion.conv[2].weight).detach().cpu().numpy()
+        # img  = sitk.GetImageFromArray(weight)
+
+        dice = monai.losses.DiceLoss()
+        datamodule = hydra.utils.instantiate(cfg.data)
+        datamodule.setup()
+        print(type(datamodule))
+        loader = iter(datamodule.val_dataloader())
+        # batch = next(loader)
+        for i in range(500):
+            criterion.update(20000)
+        
+        print(criterion.dice.conv[3])
+        # weight = criterion.conv(batch['label'])
+        for i in range(3):
+            batch = next(loader)
+            print("Ref:", dice(torch.softmax(10 * batch['label'] + torch.rand(*batch['label'].shape), dim=1), batch['label']))
+            print("Criterion:", criterion(torch.softmax(10 * batch['label'] + torch.rand(*batch['label'].shape), dim=1), batch['label']))
+        # label_img = sitk.GetImageFromArray(torch.argmax(batch['label'][1], dim=0).detach().numpy())
+        # weight_img = sitk.GetImageFromArray(weight[1, 0].detach().numpy())
+        # print(weight.min())
+        # print()
+        # writer = sitk.ImageFileWriter()
+        # writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/weight.nii.gz")
+        # writer.Execute(img)
+        # writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/sample_weight_25.nii.gz")
+        # writer.Execute(weight_img)
+        
+        # pred = deepcopy(batch["label"])
+        # print(pred.dtype)
+        # b, c, h, w, d = 2, 3, 32, 280, 280
+        # sample = torch.full(size=[2, 4, 32, 280, 280], fill_value=0.6)
+        # print(sample.min(), sample.max(), sample.dtype, sample.device)
+        # print(type(sample))
+        # gradient = criterion(sample, sample)
+        # print(gradient.size(), gradient)
+        # return datamodule
+    
+    test()
+    
 

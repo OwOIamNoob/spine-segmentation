@@ -1,0 +1,7 @@
+_target_: src.models.components.losses.dicedtm.DistanceMapDiceLoss
+gradient_kernel: 5
+gradient_mode: cross
+gaussian_kernel_size: 21
+gaussian_delta: 10. # Blend 9 pixels
+dim: 3
+num_classes: ${model.net.out_channels}
