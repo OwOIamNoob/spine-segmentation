@@ -7,7 +7,7 @@ transforms:
 
   - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
     keys: label
-    include_background: ${data.include_background}
+    
 
   - _target_: monai.transforms.EnsureChannelFirstd
     keys: image
@@ -16,7 +16,7 @@ transforms:
   - _target_: monai.transforms.Spacingd
     keys: [image, label]
     pixdim:  [1.7, 0.625, 0.58742571] ##${data.spider.spacing}
-    mode: [3, 'nearest']
+    mode: [3, nearest]
 
   # - _target_: monai.transforms.Resized
   #   keys: [image, label]
@@ -26,8 +26,8 @@ transforms:
     prob: 0.15
     rotate_range: [[-0.1, 0.1], [-0.3, 0.3], [-0.3, 0.3]]
     scale_range:  [[-0.05, 0.05], [-0.08, 0.08], [-0.05, 0.05]]
-    padding_mode: zeros
-    mode: [3, 'nearest']
+    padding_mode: [border, zeros]
+    mode: [3, nearest]
 
   - _target_: monai.transforms.RandSpatialCropd
     keys: [image, label]
@@ -66,3 +66,7 @@ transforms:
 
   - _target_: monai.transforms.ToTensord
     keys: [image, label]
+
+  - _target_: src.data.transforms.array.SemanticBackgroundd
+    keys: label
+    include_background: ${data.include_background}

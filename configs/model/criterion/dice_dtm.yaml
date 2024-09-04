@@ -1,7 +1,22 @@
 _target_: src.models.components.losses.dicedtm.DistanceMapDiceLoss
+# Input formatting
+softmax: True
+sigmoid: False
+include_background: True
+# Kernel properties
 gradient_kernel: 5
 gradient_mode: cross
-gaussian_kernel_size: 21
-gaussian_delta: 10. # Blend 9 pixels
+gaussian_kernel_size: 13
+gaussian_delta: [2., 5., 5.] # Blend 9 pixels
 dim: 3
+# Class properties
 num_classes: ${model.net.out_channels}
+weight: 
+  _target_: torch.Tensor
+  data: [0.5, 1., 1.2, 1.5]
+# Weight properties
+threshold: 0.5
+spacing: [0.08, 0.04, 0.04]
+global_weight: False
+gain: 0.5
+inverse: True

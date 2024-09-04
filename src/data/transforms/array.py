@@ -54,9 +54,8 @@ class ConvertToMultiChannelBasedOnSpiderClassesSemantic(Transform):
     # labels = [1, 2, 4]
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self, include_background=False):
+    def __init__(self):
         super().__init__()
-        self.include_background = include_background
     
     def __call__(self, img:NdarrayOrTensor) -> NdarrayOrTensor:
         if img.ndim == 4 and img.shape[0] == 1:
@@ -65,9 +64,6 @@ class ConvertToMultiChannelBasedOnSpiderClassesSemantic(Transform):
         result = [(img // 100 == 0) & (img > 0), 
                   img // 100 == 1,
                   img // 100 == 2]
-        if self.include_background is True:
-            result = [img == 0] + result
-        
         return torch.stack(result, dim=0) if isinstance(img, torch.Tensor) else np.stack(result, axis=0)    
 
 
@@ -75,12 +71,44 @@ class ConvertToMultiChannelBasedOnSpiderClassesSemantic(Transform):
 class ConvertToMultiChannelBasedOnSpiderClassesdSemantic(MapTransform):
     backend = ConvertToMultiChannelBasedOnSpiderClassesSemantic.backend
     
-    def __init__(self, keys: KeysCollection, allow_missing_keys: bool = False, include_background=False):
+    def __init__(self, keys: KeysCollection, allow_missing_keys: bool = False):
         super().__init__(keys, allow_missing_keys)
-        self.converter = ConvertToMultiChannelBasedOnSpiderClassesSemantic(include_background)
+        self.converter = ConvertToMultiChannelBasedOnSpiderClassesSemantic()
     
     def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> dict[Hashable, NdarrayOrTensor]:
         d = dict(data)
         for key in self.key_iterator(d):
             d[key] = self.converter(d[key])
+        return d
+
+# Interpolate background for transform invariance
+class SemanticBackground(Transform):
+    def __init__(self, include_background):
+        super().__init__()
+        self.active = include_background
+    
+    def __call__(self, img:NdarrayOrTensor) -> NdarrayOrTensor:
+        if not self.active:
+            return img 
+
+        if isinstance(img, torch.Tensor):
+            background,_ = torch.max(img, dim=0, keepdim=True)
+            # print(background.shape, img.shape)
+            img = torch.concatenate([1 - background, img], dim=0)
+        else: 
+            background = np.max(img, axis=0, keepdims=True)
+            # print(background.shape, img.shape)
+            img = np.concatenate([1 - background, img], dim=0)
+        
+        return img
+
+class SemanticBackgroundd(MapTransform):
+    def __init__(self, keys: KeysCollection, allow_missing_keys: bool = False, include_background=False):
+        super().__init__(keys, allow_missing_keys)
+        self.engine = SemanticBackground(include_background)
+    
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> dict[Hashable, NdarrayOrTensor]:
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = self.engine(d[key])
         return d

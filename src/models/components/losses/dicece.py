@@ -139,11 +139,11 @@ class DistanceMapDiceCELoss(_Loss):
             step=step
         )
 
-
+        self.softmax = softmax
         # Entropy loss will be fused manually. 
         self.include_background = include_background
         self.cross_entropy = nn.CrossEntropyLoss(reduction='none', ignore_index=0 if not include_background else -100)
-        self.binary_cross_entropy = nn.BCELoss(reduction='none')
+        self.binary_cross_entropy = nn.BCEWithLogitsLoss(reduction='none', weight=weight)
         
         if lambda_dice < 0.0:
             raise ValueError("lambda_dice should be no less than 0.0.")
@@ -170,12 +170,12 @@ class DistanceMapDiceCELoss(_Loss):
         if n_pred_ch != n_target_ch and n_target_ch == 1:
             target = torch.squeeze(target, dim=1)
             target = target.long()
-        elif self.old_pt_ver:
-            warnings.warn(
-                f"Multichannel targets are not supported in this older Pytorch version {torch.__version__}. "
-                "Using argmax (as a workaround) to convert target to a single channel."
-            )
-            target = torch.argmax(target, dim=1)
+        # elif self.old_pt_ver:
+        #     warnings.warn(
+        #         f"Multichannel targets are not supported in this older Pytorch version {torch.__version__}. "
+        #         "Using argmax (as a workaround) to convert target to a single channel."
+        #     )
+        #     target = torch.argmax(target, dim=1)
         elif not torch.is_floating_point(target):
             target = target.to(dtype=input.dtype)
 
@@ -226,14 +226,24 @@ class DistanceMapDiceCELoss(_Loss):
             reduce_axis = [0] + reduce_axis
         
         # Loss forwarding
-        dice_loss, input, spatial_weight = self.dice(input, target, export_input=True, export_weight=True)
+        dice_loss, _, spatial_weight = self.dice(input, target, 
+                                                    export_input=False, 
+                                                    export_weight=True)
         
-        # To match dice format of tensor
+        if not torch.is_floating_point(target):
+            target = target.to(dtype=input.dtype)
         if not self.include_background:
+            input = input[:, 1:]
             target = target[:, 1:]
-        
-        ce_loss = self.bce(input, target)        
-        # print(ce_loss.size())
+
+        if self.softmax:
+            ce_loss = self.ce(input, target)
+            spatial_weight = torch.sum(spatial_weight * target)
+        else:
+            ce_loss = self.bce(input, target)
+
+        # Ignored first channel so it will match
+        print(ce_loss.size(), spatial_weight)
         ce_loss *= spatial_weight
         # Mean
         if self.class_weight is not None: 
@@ -253,7 +263,7 @@ class DistanceMapDiceCELoss(_Loss):
         else:
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
 
-        # print("Dice_loss", dice_loss, "CE Loss", ce_loss)
+        print("Dice_loss", dice_loss, "CE Loss", ce_loss)
         total_loss: torch.Tensor = self.lambda_dice * dice_loss + self.lambda_ce * ce_loss
 
         return total_loss
@@ -276,21 +286,21 @@ if __name__ == "__main__":
         # weight = deepcopy(criterion.conv[2].weight).detach().cpu().numpy()
         # img  = sitk.GetImageFromArray(weight)
 
-        dice = monai.losses.DiceLoss()
-        datamodule = hydra.utils.instantiate(cfg.data)
-        datamodule.setup()
-        print(type(datamodule))
-        loader = iter(datamodule.val_dataloader())
+        # dice = monai.losses.DiceLoss()
+        # datamodule = hydra.utils.instantiate(cfg.data)
+        # datamodule.setup()
+        # print(type(datamodule))
+        # loader = iter(datamodule.val_dataloader())
         # batch = next(loader)
-        for i in range(500):
-            criterion.update(20000)
+        # for i in range(500):
+        #     criterion.update(20000)
         
-        print(criterion.dice.conv[3])
+        # print(criterion.dice.conv[3])
         # weight = criterion.conv(batch['label'])
-        for i in range(3):
-            batch = next(loader)
-            print("Ref:", dice(torch.softmax(10 * batch['label'] + torch.rand(*batch['label'].shape), dim=1), batch['label']))
-            print("Criterion:", criterion(torch.softmax(10 * batch['label'] + torch.rand(*batch['label'].shape), dim=1), batch['label']))
+        # for i in range(3):
+        #     batch = next(loader)
+        #     print("Ref:", dice(torch.softmax(10 * batch['label'] + torch.rand(*batch['label'].shape), dim=1), batch['label']))
+        #     print("Criterion:", criterion(torch.softmax(10 * batch['label'] + torch.rand(*batch['label'].shape), dim=1), batch['label']))
         # label_img = sitk.GetImageFromArray(torch.argmax(batch['label'][1], dim=0).detach().numpy())
         # weight_img = sitk.GetImageFromArray(weight[1, 0].detach().numpy())
         # print(weight.min())
@@ -304,11 +314,11 @@ if __name__ == "__main__":
         # pred = deepcopy(batch["label"])
         # print(pred.dtype)
         # b, c, h, w, d = 2, 3, 32, 280, 280
-        # sample = torch.full(size=[2, 4, 32, 280, 280], fill_value=0.6)
-        # print(sample.min(), sample.max(), sample.dtype, sample.device)
-        # print(type(sample))
-        # gradient = criterion(sample, sample)
-        # print(gradient.size(), gradient)
+        sample = torch.full(size=[2, 4, 32, 280, 280], fill_value=0.6)
+        print(sample.min(), sample.max(), sample.dtype, sample.device)
+        print(type(sample))
+        gradient = criterion(sample, sample)
+        print(gradient.size(), gradient)
         # return datamodule
     
     test()

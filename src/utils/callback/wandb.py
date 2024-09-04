@@ -132,14 +132,8 @@ class WandbCallback(Callback):
         # plt.imshow(image_all)
         # plt.show()
         pred_img = self.build_img(predict_seg)
-        # label_img = self.build_img(label_seg, prefix="GT")
-
-        fp_seg, tn_seg = self.difference(predict_seg, label_seg)
-        fp_img = self.screen(pred_img, fp_seg)
-        tn_img = self.screen(pred_img, tn_seg)
-
-        image_all = np.concatenate([fp_img, tn_img], axis=0)
-        image_all = (image_all * 255).astype(np.uint8)
+        
+        image_all = (pred_img * 255).astype(np.uint8)
         image_all = Image.fromarray(image_all)
         image_all.save(save_path + ".png")
 

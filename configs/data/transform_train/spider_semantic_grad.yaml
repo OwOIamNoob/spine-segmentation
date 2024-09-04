@@ -17,6 +17,7 @@ transforms:
     keys: [image, label, border]
     pixdim:  [1.7, 0.625, 0.58742571] ##${data.spider.spacing}
     mode: [3, 'nearest', 'bilinear']
+    padding_mode: ['reflection', ]
 
   # - _target_: monai.transforms.Resized
   #   keys: [image, label]

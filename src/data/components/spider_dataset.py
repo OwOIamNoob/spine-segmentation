@@ -93,7 +93,6 @@ class SpiderTransformedDataset(Dataset):
         transformed = self.transform(self.dataset[index])
         # if transformed["image"].ndim == 3:
         #     transformed["image"] = transformed["image"].unsqueeze(0)
-
         return transformed
     
     def __len__(self) -> int:

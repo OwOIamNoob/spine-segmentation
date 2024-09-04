@@ -6,7 +6,6 @@ transforms:
     
   - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
     keys: [label]
-    include_background: ${data.include_background}
 
   - _target_: monai.transforms.EnsureChannelFirstd
     keys: image
@@ -25,3 +24,6 @@ transforms:
   - _target_: monai.transforms.ToTensord
     keys: [image, label]
 
+  - _target_: src.data.transforms.array.SemanticBackgroundd
+    keys: label
+    include_background: ${data.include_background}

@@ -212,7 +212,8 @@ class SpiderLitModule(LightningModule):
             
         with autocast(enabled=False):
             logits = self.net(data)
-            loss = self.criterion(logits, target)
+            # Only take first argument of the function
+            loss = self.criterion(logits, target)[0]
         # *Place holder for archived code id 1*
         return loss, logits, target
 
@@ -235,13 +236,6 @@ class SpiderLitModule(LightningModule):
 
         # return loss or backpropagation will fail
         return loss
-
-    # Try to update step related components
-    def on_after_backward(self):
-        try:
-            self.criterion.update()
-        except: 
-            pass
 
     @torch.no_grad()
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
@@ -267,7 +261,7 @@ class SpiderLitModule(LightningModule):
             acc, not_nans = self.dice_acc.aggregate()
             acc = acc.cuda()
 
-            loss = self.criterion(logits, target)
+            loss = self.criterion(logits, target)[0]
             self.val_loss.update(loss, data.size(0))
             self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
@@ -337,7 +331,7 @@ class SpiderLitModule(LightningModule):
             acc, not_nans = self.dice_acc.aggregate()
             acc = acc.cuda()
 
-            loss = self.criterion(logits, target)
+            loss = self.criterion(logits, target)[0]
             # self.val_loss.update(loss, data.size(0))
             self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
