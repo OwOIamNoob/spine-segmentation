@@ -47,30 +47,11 @@ class DistanceMapDiceCELoss(_Loss):
     )
     def __init__(
         self,
-        include_background: bool = True,
-        to_onehot_y: bool = False,
-        sigmoid: bool = False,
-        softmax: bool = False,
-        other_act: Callable | None = None,
-        squared_pred: bool = False,
-        jaccard: bool = False,
-        reduction: str = "mean",
-        smooth_nr: float = 1e-5,
-        smooth_dr: float = 1e-5,
-        batch: bool = False,
-        gradient_kernel: int = 3,
-        gradient_mode: str = "cross",
-        gaussian_kernel_size: int = 7,
-        gaussian_delta: float = 1.5,
-        dim: int = 3,
+        dice_dtm: DistanceMapDiceLoss,
         num_classes: int = 3,
         lambda_dice: float = 1.0,
         lambda_ce: float = 1.0,
         weight: torch.Tensor | None | list = None,
-        annealing: float = 0.002,
-        start_step: int = 10000,
-        end_step: int = 50000,
-        step: int = 100
     ) -> None:
         """
         Args:

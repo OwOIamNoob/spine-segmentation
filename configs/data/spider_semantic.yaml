@@ -1,12 +1,12 @@
 _target_: src.data.spider_datamodule.SpiderKFoldDataModule
 
 defaults:
-  - transform_train: spider_semantic.yaml
-  - transform_val: spider_semantic.yaml
+  - transform_train: spider_semantic
+  - transform_val: spider_semantic
 
 data_dir: ${paths.data_dir}/dataset/spine_nii
-json_path: ${paths.json_path}/spine_v5.json
-spacing: [1.7, 0.625, 0.58742571]
+json_path: ${paths.json_path}/spine_cleaned.json
+spacing: [1.7, 0.625, 0.58742571] # Upsampling and larger window size seems to odd ? 
 
 k: 9 # pick validate fold
 split_seed: 200 # keep it constant if you want to reproduce the result
@@ -15,4 +15,4 @@ batch_size: 2 # Needs to be divisible by the number of devices (e.g., if in a di
 num_workers: 32
 pin_memory: False
 
-include_background: False
+include_background: False 

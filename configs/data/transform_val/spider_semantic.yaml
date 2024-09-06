@@ -13,7 +13,7 @@ transforms:
   
   - _target_: monai.transforms.Spacingd
     keys: [image, label]
-    pixdim:  [1.75, 0.625, 0.58742571] #${data.spider.spacing}
+    pixdim:   ${data.spacing}
     mode: [3, 'nearest']
 
   - _target_: monai.transforms.NormalizeIntensityd

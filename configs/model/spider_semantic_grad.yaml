@@ -9,7 +9,7 @@ net:
   _target_: monai.networks.nets.AttentionUnet
   spatial_dims: 3
   in_channels: 1
-  out_channels: 4
+  out_channels: 3
   channels: [16, 32, 64, 128, 256, 512]
   strides: [2, 2, 2, 2, 2]
   dropout: 0.3
@@ -22,8 +22,8 @@ sw_batch_size: 4
 roi_x: 32
 roi_y: 288 #160
 roi_z: 288
-infer_overlap: 0.75
+infer_overlap: 0.5
 
 # For criterion and metrics configuration
-name: ["None", "Vertebrae", "Canal", "Disk"]
+name: ["Vertebrae", "Canal", "Disk"]
 # Background is ignored

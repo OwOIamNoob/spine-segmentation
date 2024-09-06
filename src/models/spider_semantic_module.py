@@ -123,7 +123,7 @@ class SpiderLitModule(LightningModule):
         
         self.dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN_BATCH, get_not_nans=True)
         self.post_activation = Activations(softmax=True)
-        self.post_pred = AsDiscrete(argmax=False, threshold=0.5)
+        self.post_pred = AsDiscrete(argmax=False, threshold=0.6)
         
         self.val_acc_max = 0
 
@@ -227,6 +227,7 @@ class SpiderLitModule(LightningModule):
         :param batch_idx: The index of the current batch.
         :return: A tensor of losses between model predictions and targets.
         """
+        
         loss, logits, targets = self.model_step(batch)
         
         # update and log metrics
@@ -299,7 +300,7 @@ class SpiderLitModule(LightningModule):
         val_avg_acc = np.mean(val_acc)
 
         print(f"{val_acc}, Mean: {val_avg_acc}")
-        self.log("val/acc", val_avg_acc, sync_dist=True, prog_bar=True, logger=False) ##Mean Val Dice
+        self.log("val/acc", val_avg_acc, sync_dist=True, prog_bar=True, logger=True) ##Mean Val Dice
         
         if val_avg_acc > self.val_acc_max:
             print("New best ({:.6f} --> {:.6f}). ".format(self.val_acc_max, val_avg_acc))

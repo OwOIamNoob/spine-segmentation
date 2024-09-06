@@ -15,7 +15,7 @@ transforms:
 
   - _target_: monai.transforms.Spacingd
     keys: [image, label]
-    pixdim:  [1.7, 0.625, 0.58742571] ##${data.spider.spacing}
+    pixdim:  ${data.spacing}
     mode: [3, nearest]
 
   # - _target_: monai.transforms.Resized
@@ -28,6 +28,13 @@ transforms:
     scale_range:  [[-0.05, 0.05], [-0.08, 0.08], [-0.05, 0.05]]
     padding_mode: [border, zeros]
     mode: [3, nearest]
+
+  - _target_: monai.transforms.RandSimulateLowResolutiond
+    keys: [image, label]
+    prob: 0.15
+    downsample_mode: nearest
+    upsample_mode: ['trilinear', 'nearest']
+    zoom_range: [0.5, 1.0]
 
   - _target_: monai.transforms.RandSpatialCropd
     keys: [image, label]
@@ -53,6 +60,23 @@ transforms:
     keys: image
     nonzero: True
     channel_wise: True
+  
+    - _target_: monai.transforms.RandBiasFieldd
+    keys: image
+    degree: 5
+    coeff_range: [0.0, 0.1]
+    prob: 0.15
+  
+  - _target_: monai.transforms.RandGaussianNoised
+    keys: image
+    prob: 0.1
+    mean: 0
+    std: 0.1
+
+  - _target_: monai.transforms.RandGibbsNoised
+    keys: image
+    prob: 0.15
+    alpha: [0.2, 0.6]
 
   - _target_: monai.transforms.RandScaleIntensityd
     keys: image

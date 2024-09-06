@@ -1,7 +1,7 @@
 _target_: src.models.components.losses.dicedtm.DistanceMapDiceLoss
 # Input formatting
-softmax: True
-sigmoid: False
+softmax: False 
+sigmoid: True
 include_background: True
 # Kernel properties
 gradient_kernel: 5
@@ -17,6 +17,7 @@ weight:
 # Weight properties
 threshold: 0.5
 spacing: [0.08, 0.04, 0.04]
-global_weight: False
-gain: 0.5
+global_weight: True
+gain: 0.4
 inverse: True
+inverse_background: True # Set to true when background contribute to your semantics.

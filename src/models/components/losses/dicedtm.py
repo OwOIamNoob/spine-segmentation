@@ -75,7 +75,8 @@ class DistanceMapDiceLoss(_Loss):
         spacing: list[float] = [0.08, 0.04, 0.04],
         global_weight: bool = False,
         gain: float = 0.4,
-        inverse: bool = False
+        inverse: bool = False,
+        inverse_background: bool = True
     ) -> None:
         """
         Args:
@@ -144,6 +145,7 @@ class DistanceMapDiceLoss(_Loss):
         self.global_weight = global_weight
         self.gain = gain
         self.inverse = inverse
+        self.inverse_bg = inverse_background
 
         # Module device
         self.device = "cpu"
@@ -251,7 +253,10 @@ class DistanceMapDiceLoss(_Loss):
             if not per_channel:
                 spatial_field = spatial_field[:, 0].unsqueeze_(1)
             else:
-                spatial_field[:, 1:] = 1 - spatial_field[:, 1:] 
+                if not self.inverse_bg:
+                    spatial_field[:, 1:] = 1 - spatial_field[:, 1:] 
+                else:
+                    spatial_field = 1 - spatial_field
         else: 
             if not per_channel:
                 spatial_field, _ = torch.max(spatial_field, dim=1, keepdim=True)
