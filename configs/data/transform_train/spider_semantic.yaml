@@ -25,16 +25,17 @@ transforms:
     keys: [image, label]
     prob: 0.15
     rotate_range: [[-0.1, 0.1], [-0.3, 0.3], [-0.3, 0.3]]
-    scale_range:  [[-0.05, 0.05], [-0.08, 0.08], [-0.05, 0.05]]
-    padding_mode: [border, zeros]
+    scale_range:  [[-0.05, 0.05], [-0.05, 0.05], [-0.05, 0.05]]
+    padding_mode: zeros
     mode: [3, nearest]
-
+    
   - _target_: monai.transforms.RandSimulateLowResolutiond
-    keys: [image, label]
-    prob: 0.15
-    downsample_mode: nearest
-    upsample_mode: ['trilinear', 'nearest']
-    zoom_range: [0.5, 1.0]
+    keys: image
+    prob: 0.1
+    downsample_mode: bilinear
+    upsample_mode:  trilinear
+    align_corners: True
+    zoom_range: [0.8, 1.0]
 
   - _target_: monai.transforms.RandSpatialCropd
     keys: [image, label]
@@ -61,22 +62,25 @@ transforms:
     nonzero: True
     channel_wise: True
   
-    - _target_: monai.transforms.RandBiasFieldd
+  - _target_: monai.transforms.RandBiasFieldd
     keys: image
+    prob: 1.
     degree: 5
-    coeff_range: [0.0, 0.1]
-    prob: 0.15
+    coeff_range: [-0.1, 0.1]
   
-  - _target_: monai.transforms.RandGaussianNoised
-    keys: image
-    prob: 0.1
-    mean: 0
-    std: 0.1
+  - _target_: monai.transforms.OneOf
+    transforms:  
+      - _target_: monai.transforms.RandGaussianNoised
+        keys: image
+        prob: 0.1
+        mean: 0
+        std: 0.1
+      - _target_: monai.transforms.RandGibbsNoised
+        keys: image
+        prob: 0.1
+        alpha: [0.1, 0.3]
+    weights: [0.3, 0.7]
 
-  - _target_: monai.transforms.RandGibbsNoised
-    keys: image
-    prob: 0.15
-    alpha: [0.2, 0.6]
 
   - _target_: monai.transforms.RandScaleIntensityd
     keys: image

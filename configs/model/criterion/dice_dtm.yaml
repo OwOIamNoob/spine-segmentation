@@ -7,17 +7,17 @@ include_background: True
 gradient_kernel: 5
 gradient_mode: cross
 gaussian_kernel_size: 13
-gaussian_delta: [2., 5., 5.] # Blend 9 pixels
+gaussian_delta: [2., 5., 5.]
 dim: 3
 # Class properties
 num_classes: ${model.net.out_channels}
 weight: 
   _target_: torch.Tensor
-  data: [0.5, 1., 1.2, 1.5]
+  data: [1., 1.2, 1.5]
 # Weight properties
 threshold: 0.5
 spacing: [0.08, 0.04, 0.04]
-global_weight: True
+global_weight: False
 gain: 0.4
 inverse: True
 inverse_background: True # Set to true when background contribute to your semantics.

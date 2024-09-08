@@ -228,7 +228,7 @@ class DistanceMapDiceLoss(_Loss):
         gradient.weight = torch.nn.parameter.Parameter(torch.from_numpy(np.repeat(window[None, None, :], int(num_channel), axis=0)), requires_grad=False)
         return gradient.float()
 
-    def get_weight(self, target: torch.Tensor, per_channel: bool = True):
+    def get_weight(self, target: torch.Tensor):
         # FastGeodis hasn't support batch inference yet, we need to de-batch and re-batch :) \
         # And I figured out that it also not support multi-channel, so hell.
         # If using global weight, only the background weight is calculated since it the negative merge of all indexes.
@@ -242,7 +242,7 @@ class DistanceMapDiceLoss(_Loss):
         # print(distance_field.max(), distance_field.min())
         # Inverse mask to calculate distance field to object
         distance_field = distance_field < self.threshold
-        if not per_channel:
+        if self.global_weight:
             distance_field,_ = torch.min(distance_field, dim=1, keepdim=True)
 
         spatial_field = deepcopy(target)
@@ -250,16 +250,16 @@ class DistanceMapDiceLoss(_Loss):
         if self.include_background:
             #   We don't need to inverse distance map 
             #   since it derived gradient values from original image
-            if not per_channel:
-                spatial_field = spatial_field[:, 0].unsqueeze_(1)
+            if self.global_weight:
+                spatial_field = 1 - spatial_field[:, 0].unsqueeze_(1)
             else:
                 if not self.inverse_bg:
                     spatial_field[:, 1:] = 1 - spatial_field[:, 1:] 
                 else:
                     spatial_field = 1 - spatial_field
         else: 
-            if not per_channel:
-                spatial_field, _ = torch.max(spatial_field, dim=1, keepdim=True)
+            if self.global_weight:
+                spatial_field, _ = 1 - torch.max(spatial_field, dim=1, keepdim=True)
             spatial_field = 1 - spatial_field
 
         # print("Spatial field dimension", spatial_field.shape)
@@ -282,14 +282,14 @@ class DistanceMapDiceLoss(_Loss):
         # Therefore its weight is always on the background
 
         if self.inverse:
-            if not per_channel or not self.include_background:
+            if self.global_weight or self.inverse_bg or not self.include_background:
                 distance_weight = 1 - distance_weight
             else: 
                 distance_weight[:, 1:] = 1 - distance_weight[:, 1:] 
 
         # To mitigate weight influence 
         distance_weight = distance_weight * ( 1 - self.gain ) + self.gain
-
+        # print(distance_weight.max(), distance_weight.min())
         return distance_weight
 
 
@@ -363,7 +363,7 @@ class DistanceMapDiceLoss(_Loss):
                 input = input[:, 1:]
 
         #   Weight computation
-        weight = self.get_weight(target, per_channel=~self.global_weight)
+        weight = self.get_weight(target)
         print(weight.shape)
         
         if target.shape != input.shape:
@@ -445,21 +445,21 @@ if __name__ == "__main__":
 
         print(type(datamodule))
         loader = iter(datamodule.train_dataloader())
-        batch = next(loader)
-        print(batch['image'].shape, batch['label'].shape)
-        print(torch.argmax(batch['label'][0].detach(), dim=0).shape)
-        tn_weight = criterion.get_weight(batch['label'].to("cuda:0"), per_channel=True)
-        # print(tn_weight.shape)
         # return False
         # print(weight.shape)
         # for i in range(3):
         #     batch = next(loader)
         #     input, target = torch.softmax(4 * batch['label'] + torch.rand(*batch['label'].shape), dim=1), batch['label']
         #     print("Ref:", dice(input, target))
-        #     print("Criterion:", criterion(input.to("cuda:0"), target.to("cuda:0")))
+        #     print("Criterion:", criterion(input.to("cuda:1"), target.to("cuda:1")))
         # label_img = sitk.GetImageFromArray(torch.argmax(batch['label'][1], dim=0).detach().numpy())
        
         # # Always get first sample 
+        batch = next(loader)
+        print(batch['image'].shape, batch['label'].shape)
+        print(torch.argmax(batch['label'][0].detach(), dim=0).shape)
+        tn_weight = criterion.get_weight(batch['label'].to("cuda:0"))
+        print(tn_weight.shape)
         writer = sitk.ImageFileWriter()
         
         writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_input.nii.gz")
@@ -468,7 +468,7 @@ if __name__ == "__main__":
         writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_label.nii.gz")
         writer.Execute(sitk.GetImageFromArray(torch.argmax(batch['label'][0].detach(), dim=0).numpy()))
         
-        for i in range(4):
+        for i in range(3):
             weight_img = sitk.GetImageFromArray(tn_weight[0, i].detach().cpu().numpy())
             
             writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_{}.nii.gz".format(i))
