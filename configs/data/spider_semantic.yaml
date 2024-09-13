@@ -15,4 +15,4 @@ batch_size: 4 # Needs to be divisible by the number of devices (e.g., if in a di
 num_workers: 32
 pin_memory: False
 
-include_background: False 
+include_background: True 

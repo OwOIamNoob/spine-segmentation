@@ -25,15 +25,6 @@ from functools import partial
 import wandb
 import inspect 
 
-# Manual dice score
-def dice(x, y):
-    intersect = np.sum(np.sum(np.sum(x * y)))
-    y_sum = np.sum(np.sum(np.sum(y)))
-    if y_sum == 0:
-        return 0.0
-    x_sum = np.sum(np.sum(np.sum(x)))
-    return 2 * intersect / (x_sum + y_sum)
-
 class AverageMeter(object):
     def __init__(self):
         self.reset()
@@ -95,7 +86,8 @@ class SpiderLitModule(LightningModule):
         roi_z = 96,
         infer_overlap = 0.5,
         criterion: torch.nn.modules.loss._Loss = None,
-        name=None
+        name=None,
+        threshold=0.6
         # amp = False,
     ) -> None:
         """Initialize a `SpiderLitModule`.
@@ -123,7 +115,7 @@ class SpiderLitModule(LightningModule):
         
         self.dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN_BATCH, get_not_nans=True)
         self.post_activation = Activations(softmax=True)
-        self.post_pred = AsDiscrete(argmax=False, threshold=0.6)
+        self.post_pred = AsDiscrete(argmax=False, threshold=threshold)
         
         self.val_acc_max = 0
 
@@ -132,6 +124,11 @@ class SpiderLitModule(LightningModule):
             self.criterion = DiceLoss(to_onehot_y=False, sigmoid=True, weight = [1, 3, 2])
         else:
             self.criterion = criterion
+        
+        self.val_criterion = DiceLoss(to_onehot_y=False, 
+                                        sigmoid=criterion.sigmoid, 
+                                        softmax=criterion.softmax, 
+                                        include_background=criterion.include_background)
 
         # metric objects for calculating and averaging accuracy across batches
         self.train_acc = AverageMeter()
@@ -262,7 +259,7 @@ class SpiderLitModule(LightningModule):
             acc, not_nans = self.dice_acc.aggregate()
             acc = acc.cuda()
 
-            loss = self.criterion(logits, target)[0]
+            loss = self.val_criterion(logits, target)
             self.val_loss.update(loss, data.size(0))
             self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 

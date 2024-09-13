@@ -1,4 +1,8 @@
 wandb_callback:
   _target_: src.utils.callback.wandb.WandbCallback
   labels: ${model.name}
-  ignore: []
+  ignore: [0]
+  # Gradient properties
+  grad: True
+  radius: 5
+  mode: cross

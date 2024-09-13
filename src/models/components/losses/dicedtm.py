@@ -76,7 +76,8 @@ class DistanceMapDiceLoss(_Loss):
         global_weight: bool = False,
         gain: float = 0.4,
         inverse: bool = False,
-        inverse_background: bool = True
+        inverse_background: bool = True,
+        norm: bool = False
     ) -> None:
         """
         Args:
@@ -151,7 +152,7 @@ class DistanceMapDiceLoss(_Loss):
         self.device = "cpu"
 
         # Class weighting
-        weight = torch.as_tensor(weight) if weight is not None else None
+        self.norm = norm
         self.register_buffer("class_weight", weight)
         self.class_weight: None | torch.Tensor
 
@@ -262,10 +263,7 @@ class DistanceMapDiceLoss(_Loss):
                 spatial_field, _ = 1 - torch.max(spatial_field, dim=1, keepdim=True)
             spatial_field = 1 - spatial_field
 
-        # print("Spatial field dimension", spatial_field.shape)
-        # print("Distance field dimension", distance_field.shape)
         distance_weight = torch.ones_like(spatial_field)
-
         # Follows current object size for synchronization
         for i in range(spatial_field.shape[0]):
             for j in range(spatial_field.shape[1]):
@@ -275,22 +273,36 @@ class DistanceMapDiceLoss(_Loss):
                                                                     v=1, 
                                                                     lamb=0., 
                                                                     iter=4)[0, 0]
-        # print("Cost:", time.time() - current)
-        # print(distance_weight.shape)
-        
+                
         # The fact that background is always the negative,
         # Therefore its weight is always on the background
-
         if self.inverse:
             if self.global_weight or self.inverse_bg or not self.include_background:
                 distance_weight = 1 - distance_weight
             else: 
                 distance_weight[:, 1:] = 1 - distance_weight[:, 1:] 
-
+        
+        # Non-zeros handling 
+            distance_weight += self.smooth_dr
+        # Handling inference mode
+        if self.sigmoid: 
+            # if sigmoid, average per-pixel 
+            distance_weight /= torch.max(distance_weight, dim=1, keepdim=True)[0]
         # To mitigate weight influence 
         distance_weight = distance_weight * ( 1 - self.gain ) + self.gain
-        # print(distance_weight.max(), distance_weight.min())
-        return distance_weight
+
+        reduce_axis: list[int] = torch.arange(2, len(distance_weight.shape)).tolist()
+        if self.batch:
+            reduce_axis = [0] + reduce_axis
+        weight = None
+        if self.norm:
+            density = torch.mean(distance_weight, dim=reduce_axis)
+            if not self.batch:
+                weight = torch.max(density, dim=1)[0].unsqueeze_(1) / density
+            else: 
+                weight = torch.max(density)[0] / density
+
+        return distance_weight, weight
 
 
     def forward(self, input: torch.Tensor, target: torch.Tensor, export_weight=False, export_input=False) -> torch.Tensor:
@@ -349,11 +361,6 @@ class DistanceMapDiceLoss(_Loss):
             reduce_axis = [0] + reduce_axis
 
         #   Normalize sum to zero
-        
-        # fp_weight /= torch.mean(fp_weight, dim=1)[:, None, :, :, :]
-        # tn_weight /= torch.sum(tn_weight, dim=1)[:, None, :, :, :]
-        # print("Distance map weight range:", fp_weight.min(), fp_weight.max())
-        # print("Weight scale", torch.mean(fp_weight, dim=reduce_axis), fp_weight.min(dim=reduce_axis))
         if not self.include_background:
             if n_pred_ch == 1:
                 warnings.warn("single channel prediction, `include_background=False` ignored.")
@@ -363,21 +370,24 @@ class DistanceMapDiceLoss(_Loss):
                 input = input[:, 1:]
 
         #   Weight computation
-        weight = self.get_weight(target)
-        print(weight.shape)
+        weight, norm = self.get_weight(target)
+        
+        # print(weight.shape)
         
         if target.shape != input.shape:
             raise AssertionError(f"ground truth has different shape ({target.shape}) from input ({input.shape})")
 
         intersection = torch.sum(target * input, dim=reduce_axis)
 
-        denominator = torch.sum(2 * target * input +  weight * (1 - target) * input + weight * target * (1 - input), dim=reduce_axis)
-        # print(denominator, 2 * intersection)
-
+        denominator = torch.sum(2 * (1 - weight) *  target * input + weight * (input + target), dim=reduce_axis)
+        
         if self.jaccard:
             denominator = 2.0 * (denominator - intersection)
 
         f: torch.Tensor = 1.0 - (2.0 * intersection + self.smooth_nr) / (denominator + self.smooth_dr)
+        
+        if norm is not None: 
+            f = f * norm.to(f)
 
         num_of_classes = target.shape[1]
 
@@ -396,6 +406,7 @@ class DistanceMapDiceLoss(_Loss):
                 raise ValueError("the value/values of the `weight` should be no less than 0.")
             # apply class_weight to loss
             f = f * self.class_weight.to(f)
+
 
         if self.reduction == LossReduction.MEAN.value:
             f = torch.mean(f)  # the batch and channel average
@@ -439,32 +450,33 @@ if __name__ == "__main__":
         # weight = deepcopy(criterion.conv[2].weight).detach().cpu().numpy()
         # img  = sitk.GetImageFromArray(weight)
         criterion = hydra.utils.instantiate(cfg.model.criterion)
-        dice = monai.losses.DiceLoss()
+        dice = monai.losses.DiceLoss(sigmoid=False, to_onehot_y=False)
         datamodule = hydra.utils.instantiate(cfg.data)
         datamodule.setup()
 
         print(type(datamodule))
         loader = iter(datamodule.train_dataloader())
-        # return False
-        # print(weight.shape)
-        # for i in range(3):
-        #     batch = next(loader)
-        #     input, target = torch.softmax(4 * batch['label'] + torch.rand(*batch['label'].shape), dim=1), batch['label']
-        #     print("Ref:", dice(input, target))
-        #     print("Criterion:", criterion(input.to("cuda:1"), target.to("cuda:1")))
         # label_img = sitk.GetImageFromArray(torch.argmax(batch['label'][1], dim=0).detach().numpy())
        
         # # Always get first sample 
         batch = next(loader)
         print(batch['image'].shape, batch['label'].shape)
         print(torch.argmax(batch['label'][0].detach(), dim=0).shape)
-        tn_weight = criterion.get_weight(batch['label'].to("cuda:0"))
+        tn_weight, norm = criterion.get_weight(batch['label'].to("cuda:3"))
         print(tn_weight.shape)
+        print(torch.mean(torch.sum(tn_weight, 1), dim=[1, 2, 3]))
+        print(tn_weight.min())
+        print(tn_weight.max())
+        print(norm)
         writer = sitk.ImageFileWriter()
         
         writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_input.nii.gz")
         writer.Execute(sitk.GetImageFromArray(batch['image'][0, 0].detach().numpy()))
         
+        b, c, h, w, d = batch['label'].shape
+        # bg = torch.zeros(b, 1, h, w, d, dtype=batch['label'].dtype, device=batch['label'].device)
+        # batch['label'] = torch.cat([bg, batch['label']], dim=1)
+        # print(batch[''])
         writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_label.nii.gz")
         writer.Execute(sitk.GetImageFromArray(torch.argmax(batch['label'][0].detach(), dim=0).numpy()))
         
@@ -474,6 +486,19 @@ if __name__ == "__main__":
             writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_{}.nii.gz".format(i))
             writer.Execute(weight_img)
         
+        # Toy testing 
+        criterion.softmax = False
+        criterion.sigmoid = False
+        criterion.gain = 0.5
+        criterion.weight = None
+
+        for i in range(3):
+            batch = next(loader)
+            print(batch["image"].min(), batch["image"].max())
+            input, target = torch.softmax(10 * batch['label'] + torch.rand(*batch['label'].shape), dim=1), batch['label']
+            print("Ref:", dice(input, target))
+            print("Criterion:", criterion(input.to("cuda:3"), target.to("cuda:3")))
+
         # pred = deepcopy(batch["label"])
         # print(pred.dtype)
         # b, c, h, w, d = 2, 3, 32, 280, 280

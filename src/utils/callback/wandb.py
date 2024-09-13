@@ -22,8 +22,16 @@ import monai.transforms
 import wandb
 import nibabel as nib
 
+from src.models.components.losses.dicedtm import DistanceMapDiceLoss
 class WandbCallback(Callback):
-    def __init__(self, labels, ignore=[]):
+    def __init__(self, 
+                labels, 
+                ignore=[], 
+                grad=False, 
+                radius=3,
+                mode='cube', 
+                threshold=0.5,
+                activation=None):
         self.images = []
         self.captions = []
         self.table = wandb.Table(
@@ -39,6 +47,16 @@ class WandbCallback(Callback):
                 continue
             self.atlas[labels[index]] = index
         self.screen = lambda x, y: 0.2 * x + 0.8 * y
+        
+        if grad: 
+            self.grad = DistanceMapDiceLoss.gradient_window(radius=radius, 
+                                                            num_channel=len(labels), 
+                                                            mode=mode)
+        else:
+            self.grad = torch.nn.Identity()
+        
+        self.device = 'cpu'
+        self.post_pred = monai.transforms.AsDiscrete(argmax=False, threshold=threshold)
 
     def setup(self, trainer, pl_module, stage):
         self.logger = trainer.logger
@@ -74,7 +92,7 @@ class WandbCallback(Callback):
     def  difference(self, pred, gt):
         diff = pred - gt
         fp = (diff > 0).int() * pred 
-        tn = (diff < 0).int() * gt 
+        tn = (diff < 0).int() * gt
         fp_img = self.build_img(fp, cmap='inferno')
         tn_img = self.build_img(tn, cmap='viridis')
         return fp_img, tn_img
@@ -83,6 +101,11 @@ class WandbCallback(Callback):
 
     def build_img(self, predict_seg, prefix="", cmap='viridis'):
         # coronal_view = zoom(np.sum(predict_seg, axis=2).transpose(0, 2, 1), (1, 1, (predict_seg.shape[2]/predict_seg.shape[1]/6)) ## We need to zoom because the space of images is not the same
+        if self.device != predict_seg.device:
+            self.grad.to(predict_seg.device)
+            self.device = predict_seg.device
+        gradient_seg = (torch.abs(self.grad(predict_seg)) > 0.5).to(predict_seg.dtype)
+        predict_seg += gradient_seg * predict_seg
         coronal_view = torch.sum(predict_seg, dim=2).permute(0, 2, 1)
 
         coronal_view = torch.flip(coronal_view,[1]) ## coronal_view[:,::-1,:]
@@ -127,7 +150,7 @@ class WandbCallback(Callback):
 
 
     # This function is to get the image in \output (for example /work/hpc/spine-segmentation/outputs/images5_t2.png)
-    def visualize(self, predict_seg, label_seg, img_name = None, save_path = None):
+    def visualize(self, predict_seg, img_name = None, save_path = None):
  
         # plt.imshow(image_all)
         # plt.show()
@@ -221,7 +244,7 @@ class WandbCallback(Callback):
             # print("Inference on case {}".format(img_name))
             pred_seg = monai.transforms.Resize(spatial_size=[60, 280, 280])(outputs["pred"][i])
             target_seg = monai.transforms.Resize(spatial_size=[60, 280, 280])(outputs["target"][i])
-            self.visualize(pred_seg, target_seg, img_name, "/work/hpc/spine-segmentation/outputs/images" + img_name)
+            self.visualize(pred_seg, img_name, "/work/hpc/spine-segmentation/outputs/images" + img_name)
             ## To save the segmentation volume
             # seg = monai.transforms.Resize(spatial_size=[original_size[0], original_size[1], original_size[2]])(prob[i])
             
@@ -272,18 +295,18 @@ class WandbCallback(Callback):
 
             seg = monai.transforms.Resize(spatial_size=[60, 280, 280])(prob[i]) ## Have to do that because monai does not support 4-d affine
 
-            self.visualize(seg, img_name, "/work/hpc/spine-segmentation/outputs/images" + img_name)
+            self.visualize(seg, img_name=img_name, save_path="/work/hpc/spine-segmentation/outputs/images" + img_name)
         
             # To save the segmentation volume
             transform = monai.transforms.Resize(spatial_size=[original_size[0], original_size[1], original_size[2]])
-            seg = transform(prob[i]) > 0.5
-            label = transform(labels[i]) > 0.5
+            seg = self.post_pred(transform(prob[i]))
+            label = self.post_pred(transform(labels[i]))
             image = transform(images[i])
 
             self.log_data_samples_into_tables(image, seg, label, img_name, self.table)
 
             
-            seg = (seg > 0.5).astype(np.int8)
+            seg = seg.astype(np.uint8)
             seg_out = np.zeros((seg.shape[1], seg.shape[2], seg.shape[3]))
             seg_out[seg[1] == 1] = 2
             seg_out[seg[0] == 1] = 1
