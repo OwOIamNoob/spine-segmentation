@@ -18,7 +18,7 @@ weight:
 threshold: 0.5
 spacing: [0.08, 0.04, 0.04] # Distance distribution
 global_weight: False
-gain: 0.5
+gain: 0.
 inverse: True
 inverse_background: False # Set to true when background contribute to your semantics.
 

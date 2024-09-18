@@ -31,7 +31,8 @@ class WandbCallback(Callback):
                 radius=3,
                 mode='cube', 
                 threshold=0.5,
-                activation=None):
+                activation=None,
+                grad_alpha=0.5):
         self.images = []
         self.captions = []
         self.table = wandb.Table(
@@ -57,6 +58,7 @@ class WandbCallback(Callback):
         
         self.device = 'cpu'
         self.post_pred = monai.transforms.AsDiscrete(argmax=False, threshold=threshold)
+        self.grad_alpha = grad_alpha
 
     def setup(self, trainer, pl_module, stage):
         self.logger = trainer.logger
@@ -105,7 +107,7 @@ class WandbCallback(Callback):
             self.grad.to(predict_seg.device)
             self.device = predict_seg.device
         gradient_seg = (torch.abs(self.grad(predict_seg)) > 0.5).to(predict_seg.dtype)
-        predict_seg += gradient_seg * predict_seg
+        predict_seg += gradient_seg * predict_seg * self.grad_alpha
         coronal_view = torch.sum(predict_seg, dim=2).permute(0, 2, 1)
 
         coronal_view = torch.flip(coronal_view,[1]) ## coronal_view[:,::-1,:]
@@ -226,7 +228,6 @@ class WandbCallback(Callback):
     ) -> None:
         
         images = batch["image"].cuda() ## (B, Channel, Slice, W, H)
-        labels = batch["label"].cuda()  ## (B, Class, Slice, W, H)
         # print(batch.keys())
         # print(images.size())
         # affine = batch["image_meta_dict"]["original_affine"][0].numpy()
@@ -243,8 +244,8 @@ class WandbCallback(Callback):
             img_name = batch["image_meta_dict"]["filename_or_obj"][i].split("/")[-1].split(".")[0]
             # print("Inference on case {}".format(img_name))
             pred_seg = monai.transforms.Resize(spatial_size=[60, 280, 280])(outputs["pred"][i])
-            target_seg = monai.transforms.Resize(spatial_size=[60, 280, 280])(outputs["target"][i])
             self.visualize(pred_seg, img_name, "/work/hpc/spine-segmentation/outputs/images" + img_name)
+            del pred_seg
             ## To save the segmentation volume
             # seg = monai.transforms.Resize(spatial_size=[original_size[0], original_size[1], original_size[2]])(prob[i])
             
@@ -256,6 +257,7 @@ class WandbCallback(Callback):
 
             # print(seg_out.shape)
             # nib.save(nib.Nifti1Image(seg_out.astype(np.uint8), affine), os.path.join(self.output_directory, img_name))
+        del images
 
     def on_validation_epoch_end(self, trainer, pl_module):
         self.logger.log_image(key='Visualize', images=self.images, caption=self.captions)

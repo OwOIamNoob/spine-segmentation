@@ -6,8 +6,9 @@ from lightning import LightningModule
 import monai
 from omegaconf import DictConfig, open_dict
 
+
 def get_isotropic_attn_unet(config, func, net):
-    roi = np.array([config.roi_x, config.roi_y, config.roi_z], dtype=int)
+    roi = np.array(config.roi, dtype=int)
     print("Roi:", roi)
     spacing = np.array(config.spacing)
     ratio = spacing.max() / spacing
@@ -26,8 +27,12 @@ def get_isotropic_attn_unet(config, func, net):
     stride = np.array([[2, 2, 2]] * zoom, dtype=int)
     stride = np.concatenate([iso_stride, stride])
     print("Total Stride", stride)
-    channels = np.array([1] + [np.prod(layer) / 2 for layer in stride])
-    channels = np.cumprod(channels, dtype=int) * config.base_channel
+    # # channels = np.sqrt(stride[:, 0] * stride[:, 1] * stride[:, 2] / 2)
+    # print(channels)
+    channels = np.array([1] + [np.sqrt(np.prod(layer) / 2) for layer in stride])
+    channels = np.cumprod(channels) * config.base_channel
+    channels = np.floor(channels).astype(int)
+    channels += channels % 2
     print(channels)
     # Update network config
     
@@ -54,6 +59,6 @@ if __name__ == "__main__":
         # print(cfg.model.net)
         # net = get_isotropic_attn_unet(cfg.model.net.config, cfg.model.net.func, cfg.model.net.net)
         net = hydra.utils.instantiate(cfg.model.net)
-        print(net)
+        # print(net)
 
     test_config()

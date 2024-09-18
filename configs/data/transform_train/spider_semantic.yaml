@@ -28,7 +28,7 @@ transforms:
     scale_range:  [[-0.05, 0.05], [-0.05, 0.05], [-0.05, 0.05]]
     padding_mode: zeros
     mode: [3, nearest]
-    
+  # Intensity augmentation
   - _target_: monai.transforms.RandSimulateLowResolutiond
     keys: image
     prob: 0.1
@@ -40,7 +40,7 @@ transforms:
   
   - _target_: monai.transforms.RandBiasFieldd
     keys: image
-    prob: 1.
+    prob: 0.15
     degree: 5
     coeff_range: [-0.1, 0.1]
 
@@ -49,9 +49,29 @@ transforms:
     nonzero: True
     channel_wise: True
 
+  - _target_: monai.transforms.OneOf
+    transforms:  
+      - _target_: monai.transforms.RandGaussianNoised
+        keys: image
+        prob: 0.15
+        mean: 0
+        std: 0.1
+      - _target_: monai.transforms.RandGibbsNoised
+        keys: image
+        prob: 0.15
+        alpha: [0.1, 0.3]
+    weights: [0.3, 0.7]
+
+  - _target_: src.data.transforms.array.PercentileNormalizeIntensityd
+    keys: image
+    percentile: [0.05, 0.95]
+    nonzero: True
+    channel_wise: True
+
+  # Spatial processing and augmentation
   - _target_: monai.transforms.RandSpatialCropd
     keys: [image, label]
-    roi_size: [32, 288, 288] 
+    roi_size: ${model.roi}
     random_size: False
 
 
@@ -70,18 +90,6 @@ transforms:
     prob: 0.5
     spatial_axis: 2
   
-  - _target_: monai.transforms.OneOf
-    transforms:  
-      - _target_: monai.transforms.RandGaussianNoised
-        keys: image
-        prob: 0.15
-        mean: 0
-        std: 0.1
-      - _target_: monai.transforms.RandGibbsNoised
-        keys: image
-        prob: 0.15
-        alpha: [0.1, 0.3]
-    weights: [0.3, 0.7]
 
   # - _target_: monai.transforms.RandShiftIntensityd
   #   keys: image
@@ -95,6 +103,8 @@ transforms:
   #   upper: 95
   #   channel_wise: True
   #   sharpness_factor: 10
+
+
   - _target_: monai.transforms.ToTensord
     keys: [image, label]
 

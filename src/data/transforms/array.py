@@ -182,7 +182,7 @@ class PercentileNormalizeIntensity(Transform):
 
         _sub = self._mean(masked_img)
         _div_low, _div_high = self._std(masked_img, _sub)
-        print(_div_low, _div_high)
+        # print(_div_low, _div_high)
         assert _div_low > 0, "Lower bound higher than mean"
         assert _div_high > 0, "Upper bound lower than mean"
 

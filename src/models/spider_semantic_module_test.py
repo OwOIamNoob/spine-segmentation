@@ -25,21 +25,7 @@ from functools import partial
 import wandb
 import inspect 
 
-class AverageMeter(object):
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = np.where(self.count > 0, self.sum / self.count, self.sum)
+from src.models.components.metrics import *
 
 class SpiderLitModule(LightningModule):
     """
@@ -85,8 +71,10 @@ class SpiderLitModule(LightningModule):
         infer_overlap = 0.5,
         criterion: torch.nn.modules.loss._Loss = None,
         name=None,
-        threshold=0.6
-        # amp = False,
+        softmax=True,
+        argmax=False,
+        threshold=0.6,
+        metric: MetricCluster | None = None
     ) -> None:
         """Initialize a `SpiderLitModule`.
 
@@ -101,21 +89,20 @@ class SpiderLitModule(LightningModule):
         self.save_hyperparameters(logger=False, ignore=['net'])
 
         self.net = net
-        
-        inf_size = roi
+
         self.model_inferer = partial(
             sliding_window_inference,
-            roi_size=inf_size,
+            roi_size=roi,
             sw_batch_size=sw_batch_size,
             predictor=net,
             overlap=infer_overlap,
         )
-        
+
         self.dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN_BATCH, get_not_nans=True)
-        self.post_activation = Activations(softmax=True)
-        self.post_pred = AsDiscrete(argmax=False, threshold=threshold)
-        
-        self.val_acc_max = 0
+        self.post_activation = Activations(softmax=softmax)
+        self.post_pred = AsDiscrete(argmax=argmax, 
+                                    threshold=threshold, 
+                                    to_onehot=len(self.name) if argmax else None)
 
         # loss function
         if not criterion:
@@ -128,23 +115,22 @@ class SpiderLitModule(LightningModule):
                                         softmax=criterion.softmax, 
                                         include_background=criterion.include_background)
 
-        # metric objects for calculating and averaging accuracy across batches
-        self.train_acc = AverageMeter()
-        self.val_acc = AverageMeter()
-        self.test_acc = AverageMeter()
-
         # for averaging loss across batches
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
         # self.test_loss = AverageMeter()
 
-        # for tracking best so far validation accuracy
-        self.val_acc_best = MaxMetric()
-
         if not name:
             self.name = ["None", "Lumbar vertebra", "Spinal canal", "Disk"]
         else: 
             self.name = name  
+
+        # Test with one metric for session
+        self.metric = metric
+
+        if isinstance(self.metric, MetricCluster):
+            self.metric.register(self)
+        
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`.
@@ -159,13 +145,10 @@ class SpiderLitModule(LightningModule):
         # by default lightning executes validation step sanity checks before training starts,
         # so it's worth to make sure validation metrics don't store results from these checks
         self.val_loss.reset()
-        self.val_acc.reset()
-        self.val_acc_best.reset()
-        self.test_acc.reset()
+        self.train_loss.reset()
 
     def on_train_epoch_start(self) -> None:
         self.net.train()
-        self.train_acc.reset()
     
     def on_train_epoch_end(self) -> None:
         for param in self.net.parameters():
@@ -208,7 +191,7 @@ class SpiderLitModule(LightningModule):
         with autocast(enabled=False):
             logits = self.net(data)
             # Only take first argument of the function
-            loss = self.criterion(logits, target)[0]
+            loss = self.criterion(logits, target)
         # *Place holder for archived code id 1*
         return loss, logits, target
 
@@ -243,31 +226,23 @@ class SpiderLitModule(LightningModule):
         """
         # ////Placeholder for archived code id 2////
 
-        with torch.no_grad():
-            data, target = batch["image"], batch["label"]
-            
-            with autocast(enabled=False):
-                logits = self.model_inferer(data) ## why does it require [b, 4, w, h, d]?????
-            val_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
-            val_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
-            val_output_convert = [self.post_pred(self.post_activation(val_pred_tensor)) for val_pred_tensor in val_outputs_list]
-            self.dice_acc.reset()
-            self.dice_acc(y_pred=val_output_convert, y=val_labels_list)
-            # print(self.dice_acc(y_pred=val_output_convert, y=val_labels_list))
-            acc, not_nans = self.dice_acc.aggregate()
-            acc = acc.cuda()
+        data, target = batch["image"], batch["label"]
+        
+        with autocast(enabled=False):
+            logits = self.model_inferer(data) ## why does it require [b, 4, w, h, d]?????
+        
+        # Inference
+        val_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
+        val_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
+        val_output_convert = [self.post_pred(self.post_activation(val_pred_tensor)) for val_pred_tensor in val_outputs_list]
+        
+        # Metric computations
+        self.metric(val_output_convert, val_labels_list, prefix='val', labels=self.name, on_step=True)
 
-            loss = self.val_criterion(logits, target)
-            self.val_loss.update(loss, data.size(0))
-            self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        loss = self.val_criterion(logits, target)
 
-            self.val_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
-            # Placeholder for archived code id 3
-            print(self.val_acc.avg)
-            print(not_nans)
-            for i in range(len(self.name)):
-                self.log(self.name[i], self.val_acc.val[i], on_step=False, on_epoch=True, prog_bar=True) ##val_acc.avg[i]
-
+        self.val_loss.update(loss, data.size(0))
+        self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         # return run_acc.avg
         return {'loss': loss, 'pred': val_output_convert, 'target': target}
     
@@ -275,7 +250,7 @@ class SpiderLitModule(LightningModule):
     def on_validation_epoch_start(self) -> None:
         self.net.eval()
         self.val_loss.reset()
-        self.val_acc.reset()
+        self.metric.reset()
     
     @torch.no_grad()
     def on_validation_epoch_end(self) -> None:
@@ -285,24 +260,8 @@ class SpiderLitModule(LightningModule):
         # # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
         # # otherwise metric would be reset by lightning after each epoch
         # self.log("val/acc_best", self.val_acc_best.compute(), sync_dist=True, prog_bar=True)
-        val_acc = self.val_acc.avg
-        # semantic_classes = ["Dice_Val_TC", "Dice_Val_WT", "Dice_Val_ET"]
-            
-        # Dice_TC = val_acc[0]
-        # Dice_WT = val_acc[1]
-        # Dice_ET = val_acc[2]
-
-        val_avg_acc = np.mean(val_acc)
-
-        print(f"{val_acc}, Mean: {val_avg_acc}")
-        self.log("val/acc", val_avg_acc, sync_dist=True, prog_bar=True, logger=True) ##Mean Val Dice
         
-        if val_avg_acc > self.val_acc_max:
-            print("New best ({:.6f} --> {:.6f}). ".format(self.val_acc_max, val_avg_acc))
-            self.val_acc_max = val_avg_acc
-            
-        # print(val_avg_acc)
-        
+        self.metric.log('val', labels=self.name)
 
     @torch.no_grad()
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
@@ -312,34 +271,35 @@ class SpiderLitModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        with torch.no_grad():
-            data, target = batch["image"], batch["label"]
-            with autocast(enabled=False):
-                logits = self.model_inferer(data) ## logits shape = [B, in_channel, D, W, H]
-            test_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
-            test_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
-            
-            test_output_convert = [self.post_pred(self.post_activation(test_pred_tensor)) for test_pred_tensor in test_outputs_list]
-          
-            self.dice_acc.reset()
-            self.dice_acc(y_pred=test_output_convert, y=test_labels_list)
-            # print(self.dice_acc(y_pred=val_output_convert, y=val_labels_list))
-            acc, not_nans = self.dice_acc.aggregate()
-            acc = acc.cuda()
+        data, target = batch["image"], batch["label"]
+        with autocast(enabled=False):
+            logits = self.model_inferer(data) ## logits shape = [B, in_channel, D, W, H]
+        test_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
+        test_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
+        
+        test_output_convert = [self.post_pred(self.post_activation(test_pred_tensor)) for test_pred_tensor in test_outputs_list]
 
-            loss = self.criterion(logits, target)[0]
-            # self.val_loss.update(loss, data.size(0))
-            self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.metric(test_output_convert, test_labels_list, 'test', labels=self.name, on_step=True)
+        # print(self.dice_acc(y_pred=val_output_convert, y=val_labels_list))
+
+        loss = self.val_criterion(logits, target)
+
+        # self.val_loss.update(loss, data.size(0))
+        self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
 
         return {'loss': loss, 'pred': test_output_convert, 'target': target}
 
     
     def on_test_epoch_start(self) -> None:
+        self.net.eval()
+        self.val_loss.reset()
+        self.metric.reset()
         pass
         
     def on_test_epoch_end(self) -> None:
         """Lightning hook that is called when a test epoch ends."""
+        self.metric.log('test', labels = self.name)
         pass
 
     def setup(self, stage: str) -> None:

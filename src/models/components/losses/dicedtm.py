@@ -229,6 +229,7 @@ class DistanceMapDiceLoss(_Loss):
         gradient.weight = torch.nn.parameter.Parameter(torch.from_numpy(np.repeat(window[None, None, :], int(num_channel), axis=0)), requires_grad=False)
         return gradient.float()
 
+    @torch.no_grad()
     def get_weight(self, target: torch.Tensor):
         # FastGeodis hasn't support batch inference yet, we need to de-batch and re-batch :) \
         # And I figured out that it also not support multi-channel, so hell.
@@ -291,18 +292,9 @@ class DistanceMapDiceLoss(_Loss):
         # To mitigate weight influence 
         distance_weight = distance_weight * ( 1 - self.gain ) + self.gain
 
-        reduce_axis: list[int] = torch.arange(2, len(distance_weight.shape)).tolist()
-        if self.batch:
-            reduce_axis = [0] + reduce_axis
-        weight = None
-        if self.norm:
-            density = torch.mean(distance_weight, dim=reduce_axis)
-            if not self.batch:
-                weight = torch.max(density, dim=1)[0].unsqueeze_(1) / density
-            else: 
-                weight = torch.max(density)[0] / density
+        density = None
 
-        return distance_weight, weight
+        return distance_weight
 
 
     def forward(self, input: torch.Tensor, target: torch.Tensor, export_weight=False, export_input=False) -> torch.Tensor:
@@ -328,11 +320,6 @@ class DistanceMapDiceLoss(_Loss):
             >>> loss = self(input, target)
             >>> assert np.broadcast_shapes(loss.shape, input.shape) == input.shape
         """
-        # Casting layer to input 
-        if self.device != input.device:
-            self.gradient.to(input.device)
-            self.gaussian.to(input.device) 
-            self.device = input.device
 
         if self.sigmoid:
             input = torch.sigmoid(input)
@@ -370,24 +357,33 @@ class DistanceMapDiceLoss(_Loss):
                 input = input[:, 1:]
 
         #   Weight computation
-        weight, norm = self.get_weight(target)
+        weight = self.get_weight(target)
         
         # print(weight.shape)
         
         if target.shape != input.shape:
             raise AssertionError(f"ground truth has different shape ({target.shape}) from input ({input.shape})")
 
-        intersection = torch.sum(target * input, dim=reduce_axis)
-
-        denominator = torch.sum(2 * (1 - weight) *  target * input + weight * (input + target), dim=reduce_axis)
+        # error = torch.sum(weight * (target + input - 2 * target * input), dim=reduce_axis)
         
-        if self.jaccard:
-            denominator = 2.0 * (denominator - intersection)
-
-        f: torch.Tensor = 1.0 - (2.0 * intersection + self.smooth_nr) / (denominator + self.smooth_dr)
+        intersection = input * target
+        denominator = torch.sum(input + target, dim=reduce_axis)
+        dice_weight = torch.sum(weight * intersection, dim=reduce_axis)
+        numerator = torch.sum(intersection, dim=reduce_axis)
+        f: torch.Tensor = 1.0 - (2 * numerator + self.smooth_nr) / (denominator + self.smooth_dr)
+        w: torch.Tensor = 1.0 - (2 * dice_weight + self.smooth_nr) / (denominator + self.smooth_dr)
+        f = f * w
         
-        if norm is not None: 
-            f = f * norm.to(f)
+        if self.norm:
+            f *= (1 / w).detach()
+            
+        
+        # Avoid footprint
+        del weight
+        del denominator
+        del intersection
+        del numerator
+        del w
 
         num_of_classes = target.shape[1]
 
@@ -404,7 +400,8 @@ class DistanceMapDiceLoss(_Loss):
                     )
             if self.class_weight.min() < 0:
                 raise ValueError("the value/values of the `weight` should be no less than 0.")
-            # apply class_weight to loss
+            # apply class_weight to loss ONLY IF IT WAS NOT NORMED BEFORE
+        
             f = f * self.class_weight.to(f)
 
 
@@ -421,7 +418,7 @@ class DistanceMapDiceLoss(_Loss):
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
         
         # Return configuration
-        return f, input if export_input else None, weight if export_weight else None
+        return f
 
 if __name__ == "__main__":
     import rootutils
@@ -459,46 +456,62 @@ if __name__ == "__main__":
         # label_img = sitk.GetImageFromArray(torch.argmax(batch['label'][1], dim=0).detach().numpy())
        
         # # Always get first sample 
-        batch = next(loader)
-        print(batch['image'].shape, batch['label'].shape)
-        print(torch.argmax(batch['label'][0].detach(), dim=0).shape)
-        tn_weight, norm = criterion.get_weight(batch['label'].to("cuda:3"))
-        print(tn_weight.shape)
-        print(torch.mean(torch.sum(tn_weight, 1), dim=[1, 2, 3]))
-        print(tn_weight.min())
-        print(tn_weight.max())
-        print(norm)
-        writer = sitk.ImageFileWriter()
+        # batch = next(loader)
+        # print(batch['image'].shape, batch['label'].shape)
+        # print(torch.argmax(batch['label'][0].detach(), dim=0).shape)
+        # tn_weight, norm = criterion.get_weight(batch['label'].to("cuda:3"))
+        # print(tn_weight.shape)
+        # print(torch.mean(torch.sum(tn_weight, 1), dim=[1, 2, 3]))
+        # print(tn_weight.min())
+        # print(tn_weight.max())
+        # print(norm)
+        # writer = sitk.ImageFileWriter()
         
-        writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_input.nii.gz")
-        writer.Execute(sitk.GetImageFromArray(batch['image'][0, 0].detach().numpy()))
+        # writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_input.nii.gz")
+        # writer.Execute(sitk.GetImageFromArray(batch['image'][0, 0].detach().numpy()))
         
-        b, c, h, w, d = batch['label'].shape
-        # bg = torch.zeros(b, 1, h, w, d, dtype=batch['label'].dtype, device=batch['label'].device)
-        # batch['label'] = torch.cat([bg, batch['label']], dim=1)
-        # print(batch[''])
-        writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_label.nii.gz")
-        writer.Execute(sitk.GetImageFromArray(torch.argmax(batch['label'][0].detach(), dim=0).numpy()))
+        # b, c, h, w, d = batch['label'].shape
+        # # bg = torch.zeros(b, 1, h, w, d, dtype=batch['label'].dtype, device=batch['label'].device)
+        # # batch['label'] = torch.cat([bg, batch['label']], dim=1)
+        # # print(batch[''])
+        # writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_label.nii.gz")
+        # writer.Execute(sitk.GetImageFromArray(torch.argmax(batch['label'][0].detach(), dim=0).numpy()))
         
-        for i in range(3):
-            weight_img = sitk.GetImageFromArray(tn_weight[0, i].detach().cpu().numpy())
+        # for i in range(3):
+        #     weight_img = sitk.GetImageFromArray(tn_weight[0, i].detach().cpu().numpy())
             
-            writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_{}.nii.gz".format(i))
-            writer.Execute(weight_img)
+        #     writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_{}.nii.gz".format(i))
+        #     writer.Execute(weight_img)
         
         # Toy testing 
         criterion.softmax = False
         criterion.sigmoid = False
-        criterion.gain = 0.5
+        criterion.gain = 0.
         criterion.weight = None
-
-        for i in range(3):
+        
+        refs = []
+        scores = []
+        for i in range(1):
+            refs.append([])
+            scores.append([])
             batch = next(loader)
             print(batch["image"].min(), batch["image"].max())
-            input, target = torch.softmax(10 * batch['label'] + torch.rand(*batch['label'].shape), dim=1), batch['label']
-            print("Ref:", dice(input, target))
-            print("Criterion:", criterion(input.to("cuda:3"), target.to("cuda:3")))
+            for j in range(500):
+                print("Noise level", 500 - j)
+                input, target = torch.softmax( float(j) / 20 * batch['label'] + torch.rand(*batch['label'].shape) * batch['label'], dim=1), batch['label']
+                input = input.to('cuda:3')
+                target = target.to('cuda:3')
+                print(input.device)
+                ref = dice(input, target).detach().cpu().item()
+                score = criterion(input, target).detach().cpu().item()
+                refs[i].append(ref)
+                scores[i].append(score)
+                print("Ref:", ref)
+                print("Criterion:", score)
+                np.savetxt("/work/hpc/spine-segmentation/outputs/dummy/dice_loss.txt", refs)
+                np.savetxt("/work/hpc/spine-segmentation/outputs/dummy/criterion.txt", scores)
 
+        
         # pred = deepcopy(batch["label"])
         # print(pred.dtype)
         # b, c, h, w, d = 2, 3, 32, 280, 280

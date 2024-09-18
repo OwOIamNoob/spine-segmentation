@@ -6,3 +6,4 @@ wandb_callback:
   grad: True
   radius: 5
   mode: cross
+  grad_alpha: 0.2

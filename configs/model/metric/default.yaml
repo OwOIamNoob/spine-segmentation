@@ -1,0 +1,23 @@
+_target_: src.models.components.metrics.MetricCluster
+metrics:
+  - _target_: src.models.components.metrics.NamedMetric
+    metric: 
+      _target_: monai.metrics.DiceMetric
+      include_background: ${model.criterion.include_background}
+      reduction: mean_batch
+      get_not_nans: True
+    meter: 
+      _target_: src.models.components.metrics.AverageMeter
+    name: dice
+    on_step: True
+
+  - _target_: src.models.components.metrics.NamedMetric
+    metric: 
+      _target_: monai.metrics.MeanIoU
+      include_background:  ${model.criterion.include_background}
+      reduction: mean_batch
+      get_not_nans: True
+    meter: 
+      _target_: src.models.components.metrics.AverageMeter
+    name: iou
+    on_step: True

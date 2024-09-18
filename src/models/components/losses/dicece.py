@@ -47,7 +47,7 @@ class DistanceMapDiceCELoss(_Loss):
     )
     def __init__(
         self,
-        dice_dtm: DistanceMapDiceLoss,
+        dice_dtm: DistanceMapDiceLoss | DiceLoss,
         num_classes: int = 3,
         lambda_dice: float = 1.0,
         lambda_ce: float = 1.0,
@@ -95,36 +95,13 @@ class DistanceMapDiceCELoss(_Loss):
         super().__init__()
         reduction = reduction
 
-        self.dice = DistanceMapDiceLoss(
-            include_background=include_background,
-            to_onehot_y=to_onehot_y,
-            sigmoid=sigmoid,
-            softmax=softmax,
-            other_act=other_act,
-            squared_pred=squared_pred,
-            jaccard=jaccard,
-            reduction=reduction,
-            smooth_nr=smooth_nr,
-            smooth_dr=smooth_dr,
-            batch=batch,
-            gradient_kernel=gradient_kernel,
-            gradient_mode=gradient_mode,
-            gaussian_kernel_size=gaussian_kernel_size,
-            gaussian_delta=gaussian_delta,
-            dim=dim,
-            num_classes=num_classes,
-            weight=weight,
-            annealing=annealing,
-            start_step=start_step,
-            end_step=end_step,
-            step=step
-        )
+        self.dice = dice
 
-        self.softmax = softmax
+        self.softmax = dice.softmax
         # Entropy loss will be fused manually. 
         self.include_background = include_background
-        self.cross_entropy = nn.CrossEntropyLoss(reduction='none', ignore_index=0 if not include_background else -100)
-        self.binary_cross_entropy = nn.BCEWithLogitsLoss(reduction='none', weight=weight)
+        self.cross_entropy = nn.CrossEntropyLoss(reduction='mean', ignore_index=0 if not include_background else -100)
+        self.binary_cross_entropy = nn.BCEWithLogitsLoss(reduction='mean', weight=weight)
         
         if lambda_dice < 0.0:
             raise ValueError("lambda_dice should be no less than 0.0.")
@@ -138,7 +115,6 @@ class DistanceMapDiceCELoss(_Loss):
         #DiceLoss configuration
         self.batch = batch
         self.class_weight = weight
-        print(self.class_weight)
 
     def ce(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """
@@ -198,53 +174,19 @@ class DistanceMapDiceCELoss(_Loss):
                 "number of channels for target is neither 1 (without one-hot encoding) nor the same as input, "
                 f"got shape {input.shape} and {target.shape}."
             )
-        
-        # reducing only spatial dimensions (not batch nor channels)
-        reduce_axis: list[int] = torch.arange(2, len(input.shape)).tolist()
-        
-        if self.batch:
-            # reducing spatial dimensions and batch
-            reduce_axis = [0] + reduce_axis
-        
         # Loss forwarding
-        dice_loss, _, spatial_weight = self.dice(input, target, 
-                                                    export_input=False, 
-                                                    export_weight=True)
+        dice_loss = self.dice(input, target, 
+                                export_input=False, 
+                                export_weight=True)
         
         if not torch.is_floating_point(target):
             target = target.to(dtype=input.dtype)
-        if not self.include_background:
-            input = input[:, 1:]
-            target = target[:, 1:]
 
         if self.softmax:
             ce_loss = self.ce(input, target)
-            spatial_weight = torch.sum(spatial_weight * target)
         else:
             ce_loss = self.bce(input, target)
 
-        # Ignored first channel so it will match
-        print(ce_loss.size(), spatial_weight)
-        ce_loss *= spatial_weight
-        # Mean
-        if self.class_weight is not None: 
-            # print
-            # assert self.class_weight.shape == ce_loss.shape[1], "Weight of class must be matched to loss shape, found {self.class_weight.shape} for weight and {ce_loss.shape[1]} for loss"
-            ce_loss = ce_loss * self.class_weight[:, None, None, None].to(input)
-            ce_loss = torch.mean(ce_loss, dim=reduce_axis)
-        else:
-            ce_loss = torch.mean(ce_loss[:, None, ...], dim=reduce_axis)
-
-        
-        # Forge batch 
-        if self.reduction == "mean":
-            ce_loss = torch.mean(ce_loss)  # the batch and channel average
-        elif self.reduction == "sum":
-            ce_loss = torch.sum(ce_loss)  # sum over the batch and channel dims
-        else:
-            raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
-
-        print("Dice_loss", dice_loss, "CE Loss", ce_loss)
         total_loss: torch.Tensor = self.lambda_dice * dice_loss + self.lambda_ce * ce_loss
 
         return total_loss

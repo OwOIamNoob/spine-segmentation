@@ -20,9 +20,7 @@ defaults:
 compile: false
 
 sw_batch_size: ${data.batch_size}
-roi_x: 32
-roi_y: 256 #160
-roi_z: 256
+roi: [32, 256, 256] 
 infer_overlap: 0.5
 
 # For criterion and metrics configuration

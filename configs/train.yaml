@@ -5,7 +5,7 @@
 defaults:
   - _self_
   - data: spider_semantic
-  - model: spider_semantic_grad 
+  - model: spider
   - callbacks: default
   - logger: null # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
   - trainer: gpu
