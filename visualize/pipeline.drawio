@@ -34,13 +34,13 @@
         <mxCell id="vrRSAGrtk-A3ZC4rJzVl-29" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="vrRSAGrtk-A3ZC4rJzVl-6" target="vrRSAGrtk-A3ZC4rJzVl-7">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="vrRSAGrtk-A3ZC4rJzVl-6" value="Random Crop" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="vrRSAGrtk-A3ZC4rJzVl-6" value="Noise Augmentation" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="350" y="320" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="vrRSAGrtk-A3ZC4rJzVl-30" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="vrRSAGrtk-A3ZC4rJzVl-7" target="vrRSAGrtk-A3ZC4rJzVl-8">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="vrRSAGrtk-A3ZC4rJzVl-7" value="Noise Augmentation" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="vrRSAGrtk-A3ZC4rJzVl-7" value="Random Crop" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="510" y="320" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="vrRSAGrtk-A3ZC4rJzVl-31" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.999;entryY=0.528;entryDx=0;entryDy=0;entryPerimeter=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="vrRSAGrtk-A3ZC4rJzVl-8" target="vrRSAGrtk-A3ZC4rJzVl-10">
