@@ -1,6 +1,0 @@
-_target_: monai.losses.HausdorffDTLoss
-include_background: False
-to_onehot_y: False 
-softmax: True
-reduction: mean 
-batch: False 

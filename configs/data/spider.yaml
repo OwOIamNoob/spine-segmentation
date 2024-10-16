@@ -5,7 +5,7 @@ defaults:
   - transform_val: spider.yaml
 
 data_dir: ${paths.data_dir}/dataset/spine_nii
-json_path: ${paths.json_path}/spine_v5.json
+json_path: ${paths.json_path}/spine_cases.json
 spacing: [1.75, 0.625, 0.58742571]
 
 k: 9

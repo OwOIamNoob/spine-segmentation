@@ -97,7 +97,7 @@ class NamedMetric(Metric):
             loss = loss.item() if loss.numel() == 1 else loss
             self.meter.update(loss, 1)
         
-    def log(self, logger, prefix: str, on_step=False, labels=None):
+    def log(self, logger, prefix: str, on_step=False, labels=None, addon: str=""):
         # Anouncements hurray
         score = self.meter.get()
         best = 0
@@ -106,7 +106,7 @@ class NamedMetric(Metric):
             if isinstance(labels, Sequence):
                 assert len(labels) == len(score), "Metrics do not align with labels {} {}".format(len(labels), len(score))
                 for i, label in enumerate(labels): 
-                    logger.log("{0}/{1}-{2}".format(label,prefix,self.name) + suffix, 
+                    logger.log("{0}/{1}-{3}{2}".format(label,prefix,self.name, addon) + suffix, 
                                 score[i],
                                 on_step=False,
                                 on_epoch=True,
@@ -115,7 +115,7 @@ class NamedMetric(Metric):
 
             best = torch.mean(score)
             # Still have to update anyway
-            logger.log("{0}/{1}".format(prefix, self.name) + suffix, 
+            logger.log("{0}/{2}{1}".format(prefix, self.name, addon) + suffix, 
                         best, 
                         on_step=False,
                         on_epoch=True,
@@ -124,7 +124,7 @@ class NamedMetric(Metric):
                         logger=True)
             
         if np.isscalar(score):
-            logger.log("{0}/{1}".format(prefix, self.name) + suffix, 
+            logger.log("{0}/{2}{1}".format(prefix, self.name, addon) + suffix, 
                             score, 
                             on_step=False,
                             on_epoch=True,
@@ -139,6 +139,7 @@ class NamedMetric(Metric):
                 
     def reset(self):
         self.meter.reset()
+    
 
 
 class MetricCluster(ABC):
@@ -149,18 +150,18 @@ class MetricCluster(ABC):
     def register(self, logger):
         self.logger = logger
 
-    def __call__(self, pred, gt, prefix, labels=None, on_step=False):
+    def __call__(self, pred, gt, prefix, labels=None, on_step=False, addon=""):
         for metric in self.metrics:
             metric(pred, gt)
             # When must be log on-step instead of out-range
             if on_step:
-                metric.log(self.logger, prefix=prefix, on_step=on_step, labels=labels)
+                metric.log(self.logger, prefix=prefix, on_step=on_step, labels=labels, addon=addon)
     
-    def log(self, prefix, labels=None):
+    def log(self, prefix, labels=None, addon=""):
         assert self.logger is not None, "No logger to log"
         for metric in self.metrics:
             # No need to log when the metric is constantly logged
-            metric.log(self.logger, prefix=prefix, labels=labels)
+            metric.log(self.logger, prefix=prefix, labels=labels, addon=addon)
     
     def reset(self):
         for metric in self.metrics:

@@ -4,7 +4,7 @@ _target_: src.models.net.get_unet.get_isotropic_attn_unet
 config:
   spacing: ${data.spacing}
   roi: ${model.roi}
-  bottleneck: 1
+  bottleneck: 2
   base_channel: 16
 
 # Keep this to instantiate Module
@@ -26,4 +26,6 @@ net:
   strides: [2, 2, 2, 2, 2]
 
   # Training properties
-  dropout: 0.3
+  dropout: 0.5
+
+inv: True 

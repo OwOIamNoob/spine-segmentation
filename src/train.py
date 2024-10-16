@@ -6,8 +6,12 @@ import rootutils
 import torch
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
+
+
+# __________________ Additional configuration ________________________________________ #
+OmegaConf.register_new_resolver("zoom", lambda input, ratio: [x * (1 + y) for x, y in zip(input, ratio)])
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
 # the setup_root above is equivalent to:

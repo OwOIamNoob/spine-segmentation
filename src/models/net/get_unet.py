@@ -7,7 +7,7 @@ import monai
 from omegaconf import DictConfig, open_dict
 
 
-def get_isotropic_attn_unet(config, func, net):
+def get_isotropic_attn_unet(config, func, net, inv=False):
     roi = np.array(config.roi, dtype=int)
     print("Roi:", roi)
     spacing = np.array(config.spacing)
@@ -25,10 +25,14 @@ def get_isotropic_attn_unet(config, func, net):
     zoom = np.floor(np.log2(roi / config.bottleneck)).astype(int).min()
     print("Zoom", zoom)
     stride = np.array([[2, 2, 2]] * zoom, dtype=int)
-    stride = np.concatenate([iso_stride, stride])
+    if not inv: 
+        stride = np.concatenate([iso_stride, stride])
+    else: 
+        stride = np.concatenate([stride, iso_stride])
     print("Total Stride", stride)
     # # channels = np.sqrt(stride[:, 0] * stride[:, 1] * stride[:, 2] / 2)
     # print(channels)
+
     channels = np.array([1] + [np.sqrt(np.prod(layer) / 2) for layer in stride])
     channels = np.cumprod(channels) * config.base_channel
     channels = np.floor(channels).astype(int)
@@ -39,6 +43,7 @@ def get_isotropic_attn_unet(config, func, net):
     with open_dict(net):
         net._target_ = "monai.networks.nets.AttentionUnet"
 
+    # Lets try inversing
     net.strides = stride.tolist()
     net.channels = channels.tolist()
     print(net)

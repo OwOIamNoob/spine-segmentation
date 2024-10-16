@@ -3,7 +3,7 @@ _target_: src.models.spider_semantic_module.SpiderLitModule
 defaults:
   - optimizer: adam
   - scheduler: warmup_cosine
-  - criterion: dice_dtm
+  - criterion: dice_dtm_fake
   - net: iso_attn_unet
 
 # net:

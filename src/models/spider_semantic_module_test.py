@@ -1,4 +1,5 @@
 from typing import Any, Dict, Tuple
+from collections.abc import Callable, Sequence
 
 import numpy as np
 import torch
@@ -16,6 +17,8 @@ from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 from monai.data import decollate_batch
 
+from torch_ema import ExponentialMovingAverage as EMA
+
 import numpy as np
 import time
 import os
@@ -26,6 +29,8 @@ import wandb
 import inspect 
 
 from src.models.components.metrics import *
+from torch.optim.swa_utils import  AveragedModel
+from torch_ema import ExponentialMovingAverage as EMA
 
 class SpiderLitModule(LightningModule):
     """
@@ -74,7 +79,8 @@ class SpiderLitModule(LightningModule):
         softmax=True,
         argmax=False,
         threshold=0.6,
-        metric: MetricCluster | None = None
+        metric: MetricCluster | None = None,
+        ema: EMA | Callable | None = None
     ) -> None:
         """Initialize a `SpiderLitModule`.
 
@@ -89,6 +95,8 @@ class SpiderLitModule(LightningModule):
         self.save_hyperparameters(logger=False, ignore=['net'])
 
         self.net = net
+        
+        self.ema = ema(net.parameters()) if ema is not None else None
 
         self.model_inferer = partial(
             sliding_window_inference,
@@ -99,10 +107,9 @@ class SpiderLitModule(LightningModule):
         )
 
         self.dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN_BATCH, get_not_nans=True)
-        self.post_activation = Activations(softmax=softmax)
-        self.post_pred = AsDiscrete(argmax=argmax, 
-                                    threshold=threshold, 
-                                    to_onehot=len(self.name) if argmax else None)
+        self.post_activation = Activations(softmax=True)
+        self.post_pred = AsDiscrete(argmax=False, 
+                                    threshold=threshold)
 
         # loss function
         if not criterion:
@@ -127,6 +134,7 @@ class SpiderLitModule(LightningModule):
 
         # Test with one metric for session
         self.metric = metric
+        # The same metric is used for ema parameters for efficiency
 
         if isinstance(self.metric, MetricCluster):
             self.metric.register(self)
@@ -149,35 +157,16 @@ class SpiderLitModule(LightningModule):
 
     def on_train_epoch_start(self) -> None:
         self.net.train()
+        self.ema.to(self.device)
     
     def on_train_epoch_end(self) -> None:
         for param in self.net.parameters():
             param.grad = None
-        
-        # self.train_loss.reset()
-        
     
     def model_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor]
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Perform a single model step on a batch of data.
 
-        :param batch: A batch of data (a tuple) containing the input tensor of images and target labels.
-
-        :return: A tuple containing (in order):
-            - A tensor of losses.
-            - A tensor of predictions.
-            - A tensor of target labels.
-        """
-        # x, y = batch
-        # logits = self.forward(x)
-        # loss = self.criterion(logits, y)
-        # preds = torch.argmax(logits, dim=1)
-        # return loss, preds, y
-        
-        # self.net.train()
-        # start_time = time.time()
-        # for idx, batch in enumerate(loader):
         if isinstance(batch, list):
             data, target = batch
         else:
@@ -195,17 +184,17 @@ class SpiderLitModule(LightningModule):
         # *Place holder for archived code id 1*
         return loss, logits, target
 
+    # Update EMA
+    def optimizer_step(self, *args, **kwargs):
+        super().optimizer_step(*args, **kwargs)
+        
+        if self.ema is not None: 
+            self.ema.update()
+
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> torch.Tensor:
-        """Perform a single training step on a batch of data from the training set.
-
-        :param batch: A batch of data (a tuple) containing the input tensor of images and target
-            labels.
-        :param batch_idx: The index of the current batch.
-        :return: A tensor of losses between model predictions and targets.
-        """
-        
+    
         loss, logits, targets = self.model_step(batch)
         
         # update and log metrics
@@ -216,21 +205,20 @@ class SpiderLitModule(LightningModule):
         # return loss or backpropagation will fail
         return loss
 
+
     @torch.no_grad()
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
-        """Perform a single validation step on a batch of data from the validation set.
-
-        :param batch: A batch of data (a tuple) containing the input tensor of images and target
-            labels.
-        :param batch_idx: The index of the current batch.
-        """
-        # ////Placeholder for archived code id 2////
-
+    
         data, target = batch["image"], batch["label"]
-        
-        with autocast(enabled=False):
-            logits = self.model_inferer(data) ## why does it require [b, 4, w, h, d]?????
-        
+        if isinstance(self.ema, EMA):
+            print("Using Ema")
+            with self.ema.average_parameters():
+                with autocast(enabled=False):
+                    logits = self.model_inferer(data) ## why does it require [b, 4, w, h, d]?????
+        else: 
+            with autocast(enabled=False):
+                logits = self.model_inferer(data)
+            
         # Inference
         val_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
         val_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
@@ -238,13 +226,12 @@ class SpiderLitModule(LightningModule):
         
         # Metric computations
         self.metric(val_output_convert, val_labels_list, prefix='val', labels=self.name, on_step=True)
-
         loss = self.val_criterion(logits, target)
-
         self.val_loss.update(loss, data.size(0))
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        # return run_acc.avg
+
         return {'loss': loss, 'pred': val_output_convert, 'target': target}
+
     
     @torch.no_grad()
     def on_validation_epoch_start(self) -> None:
@@ -263,6 +250,8 @@ class SpiderLitModule(LightningModule):
         
         self.metric.log('val', labels=self.name)
 
+
+
     @torch.no_grad()
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         """Perform a single test step on a batch of data from the test set.
@@ -272,8 +261,15 @@ class SpiderLitModule(LightningModule):
         :param batch_idx: The index of the current batch.
         """
         data, target = batch["image"], batch["label"]
-        with autocast(enabled=False):
-            logits = self.model_inferer(data) ## logits shape = [B, in_channel, D, W, H]
+        if isinstance(self.ema, EMA):
+            print("Using Ema")
+            with self.ema.average_parameters():
+                with autocast(enabled=False):
+                    logits = self.model_inferer(data) ## logits shape = [B, in_channel, D, W, H]
+        else: 
+            with autocast(enabled=False):
+                logits = self.model_inferer(data) ## logits shape = [B, in_channel, D, W, H]
+
         test_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
         test_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
         
@@ -284,14 +280,13 @@ class SpiderLitModule(LightningModule):
 
         loss = self.val_criterion(logits, target)
 
-        # self.val_loss.update(loss, data.size(0))
+        self.val_loss.update(loss, data.size(0))
         self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-
 
         return {'loss': loss, 'pred': test_output_convert, 'target': target}
 
     
-    def on_test_epoch_start(self) -> None:
+    def on_test_epoch_start(self,) -> None:
         self.net.eval()
         self.val_loss.reset()
         self.metric.reset()

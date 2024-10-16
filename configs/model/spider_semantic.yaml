@@ -21,7 +21,7 @@ infer_overlap: 0.5
 defaults:
   - optimizer: adam
   - scheduler: warmup_cosine
-  - criterion: dice_dtm
+  - criterion: dice_dtm_fake
   - net: iso_attn_unet
 
 # compile model for faster training with pytorch 2.0

@@ -3,7 +3,7 @@ _target_: src.models.spider_semantic_module_test.SpiderLitModule
 defaults:
   - optimizer: adam
   - scheduler: warmup_cosine
-  - criterion: dice_dtm
+  - criterion: dice_dtm_fake
   - net: iso_attn_unet
   - metric: default
 
@@ -17,3 +17,10 @@ infer_overlap: 0.5
 # For criterion and metrics configuration
 name: ["None", "Vertebrae", "Canal", "Disk"]
 # Background is ignored
+argmax: False
+softmax: True
+threshold: 0.6
+ema: 
+  _target_: torch_ema.ExponentialMovingAverage
+  _partial_: True
+  decay: 0.995
