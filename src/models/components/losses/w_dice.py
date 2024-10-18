@@ -34,9 +34,12 @@ import FastGeodis as geo
 import time 
 
 # Disable when training
-# import rootutils
-# rootutils.setup_root(search_from=__file__, indicator="pyproject.toml", pythonpath=True)
+import rootutils
+rootutils.setup_root(search_from=__file__, indicator="pyproject.toml", pythonpath=True)
 
+# Based on 
+def log_cosh(x):
+    return torch.log(torch.cosh(x))
 
 from src.utils.weight.spatial import *
 
@@ -74,7 +77,8 @@ class DistanceMapDiceLoss(_Loss):
         batch: bool = False,
         weight: torch.Tensor | None | list = None,
         spatial_weight: nn.Module | torch.Tensor | None = None,
-        norm: bool = False
+        norm: bool = False,
+        post_proc: Callable | None = None
     ) -> None:
         """
         Args:
@@ -132,6 +136,7 @@ class DistanceMapDiceLoss(_Loss):
         # Weight properties
         self.norm = norm
         self.spatial_weight = spatial_weight
+        self.post_proc = post_proc
         self.register_buffer("class_weight", weight)
         self.class_weight: None | torch.Tensor
         
@@ -194,7 +199,6 @@ class DistanceMapDiceLoss(_Loss):
                 target = target[:, 1:]
                 input = input[:, 1:]
 
-        #   Weight computation
         if isinstance(self.spatial_weight, nn.Module):
             label_weight = self.spatial_weight(target)
             input_weight = self.spatial_weight(input)
@@ -205,10 +209,7 @@ class DistanceMapDiceLoss(_Loss):
         else: 
             # Without spatial weight, it just a normal slower Dice Loss
             weight = torch.zeros_like(input) if self.spatial_weight is None else self.spatial_weight.copy()
-
-        assert weight.shape == target.shape, "Spatial weight must have same weight as prediction"
-        # print(weight.shape)
-        
+    
         if target.shape != input.shape:
             raise AssertionError(f"ground truth has different shape ({target.shape}) from input ({input.shape})")
 
@@ -225,6 +226,10 @@ class DistanceMapDiceLoss(_Loss):
         del numerator
 
         num_of_classes = target.shape[1]
+
+        if self.post_proc is not None:
+            # print("Proc!")
+            f = self.post_proc(f)
 
         if self.class_weight is not None and num_of_classes != 1:
             # make sure the lengths of weights are equal to the number of classes

@@ -58,16 +58,24 @@ class ConvertToMultiChannelBasedOnSpiderClassesSemantic(Transform):
     # labels = [1, 2, 4]
     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-    def __init__(self):
+    def __init__(self, div, labels):
         super().__init__()
+        self.div = div
+        self.labels = labels
     
     def __call__(self, img:NdarrayOrTensor) -> NdarrayOrTensor:
         if img.ndim == 4 and img.shape[0] == 1:
             img = img.squeeze(0)      
+        result = []
         # result = [img == label for label in ConvertToMultiChannelBasedOnSpiderClassesSemantic.labels]
-        result = [(img // 100 == 0) & (img > 0), 
-                  img // 100 == 1,
-                  img // 100 == 2]
+        for label in self.labels: 
+            if label == 0:
+                result += [(img // self.div == label) & (img > 0)]
+            else: 
+                result += [img // self.div == label]
+        # result = [(img // 100 == 0) & (img > 0), 
+        #           img // 100 == 1,
+        #           img // 100 == 2]
         return torch.stack(result, dim=0) if isinstance(img, torch.Tensor) else np.stack(result, axis=0)    
 
 
@@ -75,10 +83,10 @@ class ConvertToMultiChannelBasedOnSpiderClassesSemantic(Transform):
 class ConvertToMultiChannelBasedOnSpiderClassesdSemantic(MapTransform):
     backend = ConvertToMultiChannelBasedOnSpiderClassesSemantic.backend
     
-    def __init__(self, keys: KeysCollection, allow_missing_keys: bool = False):
+    def __init__(self, keys: KeysCollection, allow_missing_keys: bool = False, div=100, labels=[0, 1, 2]):
         super().__init__(keys, allow_missing_keys)
-        self.converter = ConvertToMultiChannelBasedOnSpiderClassesSemantic()
-    
+        self.converter = ConvertToMultiChannelBasedOnSpiderClassesSemantic(div, labels)
+        
     def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> dict[Hashable, NdarrayOrTensor]:
         d = dict(data)
         for key in self.key_iterator(d):

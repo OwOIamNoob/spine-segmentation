@@ -211,7 +211,7 @@ class SpiderLitModule(LightningModule):
     
         data, target = batch["image"], batch["label"]
         if isinstance(self.ema, EMA):
-            print("Using Ema")
+            # print("Using Ema")
             with self.ema.average_parameters():
                 with autocast(enabled=False):
                     logits = self.model_inferer(data) ## why does it require [b, 4, w, h, d]?????
@@ -262,7 +262,7 @@ class SpiderLitModule(LightningModule):
         """
         data, target = batch["image"], batch["label"]
         if isinstance(self.ema, EMA):
-            print("Using Ema")
+            # print("Using Ema")
             with self.ema.average_parameters():
                 with autocast(enabled=False):
                     logits = self.model_inferer(data) ## logits shape = [B, in_channel, D, W, H]

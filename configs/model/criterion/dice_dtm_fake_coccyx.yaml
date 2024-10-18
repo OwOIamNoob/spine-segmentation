@@ -7,7 +7,7 @@ degree: 2.  # This only applied to softmax
 # Kernel properties
 weight: 
     _target_: torch.Tensor
-    data: [1., 1., 1.2, 1.5]
+    data: [1., 1., 1.2, 1.5, 1.]
   
 spatial_weight:
   _target_: src.utils.weight.spatial.DistanceMap
@@ -17,7 +17,7 @@ spatial_weight:
   gaussian_delta: [1., 3., 3.]
   dim: 3
   # Class properties
-  num_classes: 4
+  num_classes: 5
   # Weight properties
   border_threshold: 0.5
   smooth_threshold: 0.6
