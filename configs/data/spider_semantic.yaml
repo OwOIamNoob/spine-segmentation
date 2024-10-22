@@ -5,7 +5,7 @@ defaults:
   - transform_val: spider_semantic
 
 data_dir: ${paths.data_dir}/dataset/spine_nii
-json_path: ${paths.json_path}/spine_cases.json
+json_path: ${paths.json_path}/spine_cases_faulty.json
 spacing: [1.75, 0.625, 0.5873] # Upsampling and larger window size seems to odd ? 
 
 k: 9 # pick validate fold

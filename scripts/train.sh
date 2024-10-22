@@ -3,5 +3,5 @@ export CUDA_VISIBLE_DEVICES=$1
 export HYDRA_FULL_ERROR=1
 python '/work/hpc/spine-segmentation/src/train.py' logger=wandb trainer.max_epochs=300 \
                                                     trainer.check_val_every_n_epoch=2 \
-                                                    logger.wandb.name=DiceDTM_TP_Weight_EMA
+                                                    logger.wandb.name=DiceCE_LogCosh_Fix_Labels
                                                     # ckpt_path=logs/train/runs/2024-09-16_12-47-18/checkpoints/last.ckpt

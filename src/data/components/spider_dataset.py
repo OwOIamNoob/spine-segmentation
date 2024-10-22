@@ -19,33 +19,40 @@ from src.data.transforms import utils
 
 # always starting with vanilla dataset, like its a norm to me now
 class SpiderDataset(Dataset):
-    num_class = 15
+    num_class = 5
     def __init__(self, 
                  data = None,
                  data_dir: str = "", 
                  json_path: str = "",
+                 keys = ["training"],
+                 addon = False
                  ):
         super().__init__()
         self.data = list()
         self.data_dir = data_dir
         if data is not None:
             self.data = data
+            # Additional data retrieval
+            if addon:
+                self.setup(json_path, keys)
         else:
             if data_dir == "" or json_path == "":
                 raise AssertionError("No dataset ?")
-            self.setup(json_path)
+            self.setup(json_path, keys)
     
-    def setup(self, json_path):
+    def setup(self, json_path, keys):
         json_object = json.load(open(json_path, "r"))
-        keys = json_object.keys()
-        if "training" in keys:
-            for key in keys:
+        json_keys = json_object.keys()
+        for key in keys:
+            if key in json_keys:
                 self.data.extend(json_object[key])
-        else:
-            try:
-                self.data.extend(json_object)
-            except:
-                raise InsertionError("Something wrong with json file, cannot load or do anything, at all")
+            else: 
+                print("Key does not exist in json file, skipping !!!")
+        # else:
+        #     try:
+        #         self.data.extend(json_object)
+        #     except:
+        #         raise InsertionError("Something wrong with json file, cannot load or do anything, at all")
     
     def get_item(self, index: int):
         output = dict()

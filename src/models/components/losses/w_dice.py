@@ -37,9 +37,9 @@ import time
 import rootutils
 rootutils.setup_root(search_from=__file__, indicator="pyproject.toml", pythonpath=True)
 
-# Based on 
+# Based on cosh, we powered it up by 2 for convenience
 def log_cosh(x):
-    return torch.log(torch.cosh(x))
+    return 1.44 * torch.log(torch.cosh(x))
 
 from src.utils.weight.spatial import *
 
@@ -140,7 +140,7 @@ class DistanceMapDiceLoss(_Loss):
         self.register_buffer("class_weight", weight)
         self.class_weight: None | torch.Tensor
         
-    def forward(self, input: torch.Tensor, target: torch.Tensor, export_weight=False, export_input=False) -> torch.Tensor:
+    def forward(self, input: torch.Tensor, target: torch.Tensor, export_weight=False) -> torch.Tensor:
         """
         Args:
             input: the shape should be BNH[WD], where N is the number of classes.
@@ -221,7 +221,7 @@ class DistanceMapDiceLoss(_Loss):
         f: torch.Tensor = 1.0 - (2 * numerator + self.smooth_nr) / (denominator + self.smooth_dr)
 
         # Avoid footprint
-        del weight
+        # del weight
         del denominator
         del numerator
 
@@ -262,6 +262,9 @@ class DistanceMapDiceLoss(_Loss):
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
         
         # Return configuration
+        if export_weight:
+            return f, weight
+        
         return f
 
 if __name__ == "__main__":

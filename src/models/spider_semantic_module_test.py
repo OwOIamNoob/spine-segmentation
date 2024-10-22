@@ -78,6 +78,7 @@ class SpiderLitModule(LightningModule):
         name=None,
         softmax=True,
         argmax=False,
+        degree=2,
         threshold=0.6,
         metric: MetricCluster | None = None,
         ema: EMA | Callable | None = None
@@ -110,7 +111,7 @@ class SpiderLitModule(LightningModule):
         self.post_activation = Activations(softmax=True)
         self.post_pred = AsDiscrete(argmax=False, 
                                     threshold=threshold)
-
+        self.degree = degree
         # loss function
         if not criterion:
             self.criterion = DiceLoss(to_onehot_y=False, sigmoid=True, weight = [1, 3, 2])
@@ -118,8 +119,8 @@ class SpiderLitModule(LightningModule):
             self.criterion = criterion
         
         self.val_criterion = DiceLoss(to_onehot_y=False, 
-                                        sigmoid=criterion.sigmoid, 
-                                        softmax=criterion.softmax, 
+                                        sigmoid=~softmax, 
+                                        softmax=softmax, 
                                         include_background=criterion.include_background)
 
         # for averaging loss across batches
@@ -139,6 +140,10 @@ class SpiderLitModule(LightningModule):
         if isinstance(self.metric, MetricCluster):
             self.metric.register(self)
         
+    def train_on_device(model):
+        super().train_on_device(model)
+        if self.ema is not None:
+            self.ema.to(self.device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`.
@@ -157,7 +162,6 @@ class SpiderLitModule(LightningModule):
 
     def on_train_epoch_start(self) -> None:
         self.net.train()
-        self.ema.to(self.device)
     
     def on_train_epoch_end(self) -> None:
         for param in self.net.parameters():
@@ -222,7 +226,7 @@ class SpiderLitModule(LightningModule):
         # Inference
         val_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
         val_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
-        val_output_convert = [self.post_pred(self.post_activation(val_pred_tensor)) for val_pred_tensor in val_outputs_list]
+        val_output_convert = [self.post_pred(self.post_activation(val_pred_tensor * self.degree)) for val_pred_tensor in val_outputs_list]
         
         # Metric computations
         self.metric(val_output_convert, val_labels_list, prefix='val', labels=self.name, on_step=True)

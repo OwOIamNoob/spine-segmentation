@@ -58,14 +58,21 @@ class SpiderKFoldDataModule(LightningDataModule):
         
         if not self.data_train and not self.data_val and not self.data_test:
             dataset_full = SpiderDataset(   data_dir=self.hparams.data_dir,
-                                            json_path=self.hparams.json_path)
+                                            json_path=self.hparams.json_path,
+                                            keys=['training'],
+                                            addon=False)
             
             kf = KFold(n_splits=self.hparams.num_splits, 
                         shuffle=True, 
                         random_state=self.hparams.split_seed)
             train_indexes, val_indexes = [k for k in kf.split(dataset_full)][self.hparams.k]
+
             self.data_train = SpiderDataset(data = dataset_full[train_indexes.tolist()])
-            self.data_val = SpiderDataset(data = dataset_full[val_indexes.tolist()])
+            self.data_val = SpiderDataset(data = dataset_full[val_indexes.tolist()], 
+                                            data_dir=self.hparams.data_dir,
+                                            json_path=self.hparams.json_path,
+                                            keys=['faulty'],
+                                            addon=True)
     
     def get_transformed_dataset(self, dataset, transform):
         return SpiderTransformedDataset(dataset, transform)
@@ -134,11 +141,13 @@ if __name__=="__main__":
         datamodule = hydra.utils.instantiate(cfg.data)
         # print(cfg.data)
         datamodule.setup()
-        dataloader = datamodule.train_dataloader()
+        dataloader = datamodule.val_dataloader()
         batch = next(iter(dataloader))
         print(batch.keys())
-        print(type(batch["image"]), type(batch["label"]), type(batch["border"]))
-        print(batch["image"].size(), batch["label"].size(), batch["border"].size())
+        print(len(dataloader))
+        # print(datamodule.data_val.data)
+        # print(type(batch["image"]), type(batch["label"]), type(batch["border"]))
+        # print(batch["image"].size(), batch["label"].size(), batch["border"].size())
 
     @hydra.main(version_base="1.3", config_path="../../configs", config_name="train.yaml")
     def test(cfg: DictConfig):

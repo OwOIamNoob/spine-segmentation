@@ -1,25 +1,44 @@
 _target_: src.models.components.losses.dicece.DistanceMapDiceCELoss
+dice_dtm:
+  _target_: src.models.components.losses.w_dice.DistanceMapDiceLoss
+  include_background: True
+  # Kernel properties
+  spatial_weight:
+    _target_: src.utils.weight.spatial.DistanceMap
+    gradient_kernel: 3
+    gradient_mode: cross
+    gaussian_kernel_size: 13
+    gaussian_delta: [1., 3., 3.]
+    dim: 3
+    # Class properties
+    num_classes: 4
+    # Weight properties
+    border_threshold: 0.5
+    smooth_threshold: 0.6
+    spacing: [0.03, 0.01, 0.01] # Distance distribution
+    global_weight: False
+    magnitude: 0.3
+    inverse: False
+    inverse_background: False # Set to true when background contribute to your semantics.
+    post_proc: null
+
+  norm: False
+  post_proc:
+    _target_: src.models.components.losses.w_dice.log_cosh
+    _partial_: True
+  
+  # Partially initialization for argument synchronization
+  _partial_: True
+
+softmax: ${model.softmax}
 include_background: True
-softmax: True
-sigmoid: False
-
-gradient_kernel: 5
-gradient_mode: cross
-gaussian_kernel_size: 21
-gaussian_delta: [4., 10., 10.] # Follows base spacing of image
-dim: 3
-num_classes: ${model.net.out_channels}
-
-lambda_dice: 0.5
-lambda_ce: 0.5
-
-reduction: mean
-
+degree: 1.
+lambda_dice: 1.0
+lambda_ce: 1.0
 weight: 
   _target_: torch.Tensor
-  data: [0.5, 1., 1.2, 1.5]
+  data: [1., 1., 1.2, 1.5]
 
-annealing: 0.002
-start_step: 10000
-end_step: 50000
-step: 100
+reduction: mean
+batch: False 
+

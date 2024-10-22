@@ -12,6 +12,8 @@ from monai.utils import convert_data_type, evenly_divisible_all_gather
 from monai.metrics import Metric, CumulativeIterationMetric
 from torch.nn.modules.loss import _Loss
 from lightning.pytorch.loggers import Logger
+
+
 ##### Meter
 class Meter(ABC):
     @abstractmethod
@@ -83,11 +85,11 @@ class NamedMetric(Metric):
     
     @torch.no_grad()
     def __call__(self, pred, gt):
-
         if isinstance(self.metric, CumulativeIterationMetric):
             self.metric.reset()
             self.metric(pred, gt)
             acc, not_nans = self.metric.aggregate()
+            # print(acc)
             self.meter.update(acc, not_nans)
             del acc
             del not_nans
@@ -104,6 +106,7 @@ class NamedMetric(Metric):
         suffix = "_step" if on_step else "_epoch"
         if not np.isscalar(score):
             if isinstance(labels, Sequence):
+                # print(labels, score)
                 assert len(labels) == len(score), "Metrics do not align with labels {} {}".format(len(labels), len(score))
                 for i, label in enumerate(labels): 
                     logger.log("{0}/{1}-{3}{2}".format(label,prefix,self.name, addon) + suffix, 

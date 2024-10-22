@@ -4,7 +4,7 @@ defaults:
   - optimizer: adam
   - scheduler: warmup_cosine
   - criterion: dice_dtm_fake_coccyx
-  - net: iso_attn_unet
+  - net: iso_attn_unet_coccyx
   - metric: default
 
 # compile model for faster training with pytorch 2.0
@@ -19,8 +19,9 @@ name: ["None", "Vertebrae", "Canal", "Disk", "Coccyx"]
 # Background is ignored
 argmax: False
 softmax: True
+degree: 2
 threshold: 0.6
 ema: 
   _target_: torch_ema.ExponentialMovingAverage
   _partial_: True
-  decay: 0.999
+  decay: 0.9999
