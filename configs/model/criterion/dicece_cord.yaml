@@ -1,0 +1,44 @@
+_target_: src.models.components.losses.dicece.DistanceMapDiceCELoss
+dice_dtm:
+  _target_: src.models.components.losses.w_dice.DistanceMapDiceLoss
+  # Input formatting
+  softmax: ${model.softmax}
+  sigmoid: True
+  include_background: True
+  # Kernel properties
+  weight: null
+    
+  spatial_weight:
+    _target_: src.utils.weight.spatial.DistanceMap
+    gradient_kernel: 3
+    gradient_mode: cross
+    gaussian_kernel_size: 3
+    gaussian_delta: [0.5, 0.5, 0.5]
+    dim: 3
+    # Class properties
+    num_classes: 1
+    # Weight properties
+    border_threshold: 0.5
+    smooth_threshold: 0.6
+    spacing: [0.1, 0.1, 0.1] # Distance distribution
+    global_weight: False
+    magnitude: 0.3
+    inverse: True
+    inverse_background: False # Set to False when background contribute to your semantics.
+    post_proc: null
+
+  norm: False
+  post_proc: null
+  _partial_: True
+
+softmax: ${model.softmax}
+include_background: True
+lambda_dice: 0.5
+lambda_ce: 0.5
+weight: 
+  _target_: torch.Tensor
+  data: [5.]
+
+reduction: mean
+batch: False 
+

@@ -1,0 +1,64 @@
+_target_: monai.transforms.Compose
+
+transforms: 
+  - _target_: src.data.transforms.array.InverseMask
+    channel: 0
+    batch: False
+
+  # - _target_: src.data.transforms.array.ImageOperation
+  #   func:
+  #     _target_: monai.transforms.utils_morphological_ops.dilate
+  #     _partial_: True
+  #     filter_size: 3
+  #     pad_value: 0
+  #   channel: 0
+  #   batch: False
+  
+  - _target_: src.data.transforms.array.ImageOperation
+    func:
+      _target_: monai.transforms.RemoveSmallObjects
+      min_size: 49
+      connectivity: 2
+      independent_channels: True
+    channel: [0, 1, 2]
+    batch: False
+
+
+  - _target_: monai.transforms.KeepLargestConnectedComponent 
+    applied_labels: [0, 2]
+    is_onehot: True # Default for adaptive process
+    connectivity: 2
+    independent: True
+    num_components: 1
+  
+  # - _target_: src.data.transforms.array.ImageOperation
+  #   func:
+  #     _target_: monai.transforms.utils_morphological_ops.erode
+  #     _partial_: True
+  #     filter_size: 3
+  #     pad_value: 0
+  #   channel: 0
+  #   batch: False
+
+  - _target_: monai.transforms.FillHoles 
+    applied_labels: null 
+    connectivity: 2
+
+  - _target_: src.data.transforms.array.ImageOperation
+    func:
+      _target_: src.data.transforms.array.BackgroundCrop
+      channel: 0
+      batch: False
+    channel: [0, 1, 2]
+    batch: False
+
+  - _target_: src.data.transforms.array.SemanticBackground
+    include_background: True
+    recompute: True
+    batch: False
+
+  
+
+  
+
+    

@@ -1,0 +1,26 @@
+_target_: src.models.spinal_cord_module.SpinalCordLitModule
+
+defaults:
+  - optimizer: adamw
+  - scheduler: warmup_cosine
+  - criterion: dicece_cord
+  - net: attn_unet_cord
+  - metric: default
+  - post_proc: default
+
+# compile model for faster training with pytorch 2.0
+compile: false
+
+sw_batch_size: 8
+roi: [16, 256, 256]
+infer_overlap: 0.5
+
+# For criterion and metrics configuration
+name: ["Cord"]
+# Background is ignored
+argmax: False
+softmax: False
+threshold: 0.5
+ema:
+  _target_: src.utils.ema.LitEma
+  _partial_: True

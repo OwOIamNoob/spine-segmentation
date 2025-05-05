@@ -1,0 +1,30 @@
+_target_: src.models.spider_semantic_supervision_module.SpiderLitModule
+
+defaults:
+  - optimizer: adam
+  - scheduler: warmup_cosine
+  - criterion: dice_dtm_fake
+  - net: iso_attn_potato_light_v2
+  - metric: default
+  - post_proc: default
+
+# compile model for faster training with pytorch 2.0
+compile: false
+
+sw_batch_size: 4
+roi: [16, 256, 256] 
+infer_overlap: 0.5
+
+# For criterion and metrics configuration
+name: ["None", "Vertebrae", "Canal", "Disk"]
+# Background is ignored
+argmax: False
+softmax: True
+threshold: 0.5
+ema:
+  _target_: src.utils.ema.LitEma
+  _partial_: True
+
+# Supervision option
+supervision: False
+supervision_lr: 0.25

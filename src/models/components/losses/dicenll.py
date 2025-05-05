@@ -28,7 +28,7 @@ from monai.utils import DiceCEReduction, LossReduction, Weight, deprecated_arg, 
 
 ### Local module import
 import rootutils
-rootutils.setup_root("/work/hpc/spine-segmentation", indicator="setup.py", pythonpath=True)
+# rootutils.setup_root("/work/hpc/spine-segmentation", indicator="setup.py", pythonpath=True)
 
 from src.models.components.losses.dicedtm import DistanceMapDiceLoss
 

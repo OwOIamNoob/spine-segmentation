@@ -428,7 +428,7 @@ if __name__ == "__main__":
     import os
     from src.data.spider_datamodule import *
 
-    @hydra.main(version_base="1.3", config_path="../../../../configs", config_name="train.yaml")
+    @hydra.main(version_base="1.3", config_path="../../../../configs", config_name="train_cord.yaml")
     def test(cfg: DictConfig):
         # criterion = DistanceMapDiceLoss(gradient_kernel=7, 
         #                                 gaussian_kernel_size=11, 
@@ -454,7 +454,7 @@ if __name__ == "__main__":
         batch = next(loader)
         # print(batch['image'].shape, batch['label'].shape)
         # print(torch.argmax(batch['label'][0].detach(), dim=0).shape)
-        tn_weight = criterion.get_weight(batch['label'].to("cuda:3"))
+        tn_weight = criterion.get_weight(batch['label'].to("cuda:0"))
         print(tn_weight.shape)
         print(torch.mean(torch.sum(tn_weight, 1), dim=[1, 2, 3]))
         print("Min and max:", tn_weight.min(), tn_weight.max())

@@ -2,6 +2,7 @@ class Canal(Component):
     def __init__(self, volume, index):
         super().__init__(volume, index)
         self.pose = None
+        self.spline = None
         # Initialization for pose estimation
         self.pcd_model = o3d.geometry.PointCloud()
         self.pcd_model.points = o3d.utility.Vector3dVector(self.pcd)
@@ -37,5 +38,11 @@ class Canal(Component):
 
         topo = lbc.extract_topology()
         return topo
+    
+    def pose_filling(self):
+
+
+    def axial_area(self):
+
 
     

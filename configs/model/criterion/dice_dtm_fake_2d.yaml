@@ -1,0 +1,31 @@
+_target_: src.models.components.losses.w_dice.DistanceMapDiceLoss
+# Input formatting
+softmax: True 
+sigmoid: False
+include_background: True
+  
+spatial_weight:
+  _target_: src.utils.weight.spatial.DistanceMap
+  gradient_kernel: 3
+  gradient_mode: cross
+  gaussian_kernel_size: 5
+  gaussian_delta: [0.5, 0.5]
+  dim: 2
+  # Class properties
+  num_classes: 4
+  # Weight properties
+  border_threshold: 0.5
+  smooth_threshold: 0.6
+  spacing: [0.05, 0.02, 0.02] # Distance distribution
+  global_weight: False
+  magnitude: 0.3
+  inverse: True
+  inverse_background: True # Set to False when background contribute to your semantics.
+  post_proc: null
+
+
+
+norm: False
+post_proc:
+  _target_: src.models.components.losses.w_dice.log_cosh
+  _partial_: True

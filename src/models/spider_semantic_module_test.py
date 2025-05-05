@@ -13,6 +13,7 @@ from monai.inferers import sliding_window_inference
 from monai.losses import DiceLoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import SwinUNETR
+from monai.transforms.transform import Transform
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 from monai.data import decollate_batch
@@ -27,10 +28,11 @@ import shutil
 from functools import partial
 import wandb
 import inspect 
+from copy import copy, deepcopy
+from contextlib import contextmanager
 
 from src.models.components.metrics import *
-from torch.optim.swa_utils import  AveragedModel
-from torch_ema import ExponentialMovingAverage as EMA
+from src.utils.ema import LitEma
 
 class SpiderLitModule(LightningModule):
     """
@@ -78,10 +80,10 @@ class SpiderLitModule(LightningModule):
         name=None,
         softmax=True,
         argmax=False,
-        degree=2,
         threshold=0.6,
         metric: MetricCluster | None = None,
-        ema: EMA | Callable | None = None
+        ema: LitEma | EMA | Callable | None = None,
+        post_proc: Compose | Transform | Callable | None = None
     ) -> None:
         """Initialize a `SpiderLitModule`.
 
@@ -93,11 +95,11 @@ class SpiderLitModule(LightningModule):
 
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
-        self.save_hyperparameters(logger=False, ignore=['net'])
+        self.save_hyperparameters(logger=False, ignore=['criterion'])
 
         self.net = net
         
-        self.ema = ema(net.parameters()) if ema is not None else None
+        self.ema = ema(self.net) if ema is not None else None
 
         self.model_inferer = partial(
             sliding_window_inference,
@@ -107,11 +109,11 @@ class SpiderLitModule(LightningModule):
             overlap=infer_overlap,
         )
 
-        self.dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN_BATCH, get_not_nans=True)
-        self.post_activation = Activations(softmax=True)
-        self.post_pred = AsDiscrete(argmax=False, 
-                                    threshold=threshold)
-        self.degree = degree
+        # self.dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN_BATCH, get_not_nans=True)
+        self.post_activation = Activations(softmax=softmax, sigmoid= not softmax)
+        self.post_pred = AsDiscrete(argmax=argmax, 
+                                    threshold=threshold,
+                                    keepdim=True)
         # loss function
         if not criterion:
             self.criterion = DiceLoss(to_onehot_y=False, sigmoid=True, weight = [1, 3, 2])
@@ -119,8 +121,8 @@ class SpiderLitModule(LightningModule):
             self.criterion = criterion
         
         self.val_criterion = DiceLoss(to_onehot_y=False, 
-                                        sigmoid=~softmax, 
-                                        softmax=softmax, 
+                                        sigmoid=not criterion.softmax, 
+                                        softmax=criterion.softmax, 
                                         include_background=criterion.include_background)
 
         # for averaging loss across batches
@@ -129,7 +131,7 @@ class SpiderLitModule(LightningModule):
         # self.test_loss = AverageMeter()
 
         if not name:
-            self.name = ["None", "Lumbar vertebra", "Spinal canal", "Disk"]
+            self.name = ["Cord"]
         else: 
             self.name = name  
 
@@ -140,10 +142,29 @@ class SpiderLitModule(LightningModule):
         if isinstance(self.metric, MetricCluster):
             self.metric.register(self)
         
+        self.post_proc = post_proc
+        # self.ema = None
+
+
     def train_on_device(model):
         super().train_on_device(model)
         if self.ema is not None:
             self.ema.to(self.device)
+
+    @contextmanager
+    def ema_scope(self, context=None):
+        if self.ema is not None:
+            self.ema.store(self.net.parameters())
+            self.ema.copy_to(self.net)
+            if context is not None:
+                print(f"{context}: Switched to EMA weights")
+        try:
+            yield None
+        finally:
+            if self.ema is not None:
+                self.ema.restore(self.net.parameters())
+                if context is not None:
+                    print(f"{context}: Restored training weights")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`.
@@ -193,7 +214,7 @@ class SpiderLitModule(LightningModule):
         super().optimizer_step(*args, **kwargs)
         
         if self.ema is not None: 
-            self.ema.update()
+            self.ema(self.net)
 
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -202,38 +223,45 @@ class SpiderLitModule(LightningModule):
         loss, logits, targets = self.model_step(batch)
         
         # update and log metrics
+        if torch.any(torch.isnan(loss)): 
+            print(logits.shape, targets.shape)
         self.train_loss(loss)
         self.log("train/loss", self.train_loss, on_step=True, on_epoch=True, prog_bar=True)
         # self.log("train/acc", self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
 
         # return loss or backpropagation will fail
         return loss
-
-
+        
     @torch.no_grad()
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
     
         data, target = batch["image"], batch["label"]
-        if isinstance(self.ema, EMA):
-            # print("Using Ema")
-            with self.ema.average_parameters():
+        if isinstance(self.ema, LitEma):
+            
+            with self.ema_scope():
+                # self.log("ema", True, on_step=False, on_epoch=True, prog_bar=True)
                 with autocast(enabled=False):
                     logits = self.model_inferer(data) ## why does it require [b, 4, w, h, d]?????
         else: 
             with autocast(enabled=False):
                 logits = self.model_inferer(data)
-            
+        
         # Inference
         val_labels_list = decollate_batch(target) ## Optimal to use decollate_batch, we can choose to use it or not
         val_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
-        val_output_convert = [self.post_pred(self.post_activation(val_pred_tensor * self.degree)) for val_pred_tensor in val_outputs_list]
-        
+        print(len(val_outputs_list), len(val_labels_list))
+        val_output_convert = [self.post_pred(self.post_activation(val_pred_tensor)) for val_pred_tensor in val_outputs_list]
+        val_output_post = [self.post_proc(pred) for pred in val_output_convert]
+
+        # print(len(val_output_convert), val_output_convert[0].shape)
         # Metric computations
+        import IPython; IPython.embed()
         self.metric(val_output_convert, val_labels_list, prefix='val', labels=self.name, on_step=True)
+        print(len(val_output_convert), val_output_convert[0].shape)
         loss = self.val_criterion(logits, target)
         self.val_loss.update(loss, data.size(0))
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-
+        
         return {'loss': loss, 'pred': val_output_convert, 'target': target}
 
     
@@ -251,7 +279,7 @@ class SpiderLitModule(LightningModule):
         # # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
         # # otherwise metric would be reset by lightning after each epoch
         # self.log("val/acc_best", self.val_acc_best.compute(), sync_dist=True, prog_bar=True)
-        
+        # self.post_metric.log('val-post', labels=self.name)
         self.metric.log('val', labels=self.name)
 
 
@@ -278,13 +306,15 @@ class SpiderLitModule(LightningModule):
         test_outputs_list = decollate_batch(logits) ## Optimal to use decollate_batch, we can choose to use it or not
         
         test_output_convert = [self.post_pred(self.post_activation(test_pred_tensor)) for test_pred_tensor in test_outputs_list]
-
-        self.metric(test_output_convert, test_labels_list, 'test', labels=self.name, on_step=True)
+        test_output_post = [self.post_proc(sample) for sample in test_output_convert]
+        
+        self.metric(test_output_post, test_labels_list, 'test', labels=self.name, on_step=True)
         # print(self.dice_acc(y_pred=val_output_convert, y=val_labels_list))
 
         loss = self.val_criterion(logits, target)
 
         self.val_loss.update(loss, data.size(0))
+    
         self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
         return {'loss': loss, 'pred': test_output_convert, 'target': target}
@@ -299,6 +329,7 @@ class SpiderLitModule(LightningModule):
     def on_test_epoch_end(self) -> None:
         """Lightning hook that is called when a test epoch ends."""
         self.metric.log('test', labels = self.name)
+        # self.post_metric.log('test-post', labels= self.name)
         pass
 
     def setup(self, stage: str) -> None:
@@ -331,7 +362,7 @@ class SpiderLitModule(LightningModule):
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": scheduler,
-                    "monitor": "val/loss", ##val/loss
+                    "monitor": "val/dice-step", ##val/loss
                     "interval": "epoch",
                     "frequency": 1,
                 },

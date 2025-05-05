@@ -1,0 +1,29 @@
+_target_: monai.transforms.Compose
+
+transforms: 
+
+  - _target_: src.data.transforms.array.ImageOperation
+    func:
+      _target_: monai.transforms.RemoveSmallObjects
+      min_size: 49
+      connectivity: 2
+      independent_channels: True
+    channel: [0]
+    batch: False
+
+  - _target_: monai.transforms.KeepLargestConnectedComponent 
+    applied_labels: [0]
+    is_onehot: True # Default for adaptive process
+    connectivity: 2
+    independent: True
+    num_components: 2
+
+  - _target_: monai.transforms.FillHoles 
+    applied_labels: null 
+    connectivity: 2
+
+  
+
+  
+
+    

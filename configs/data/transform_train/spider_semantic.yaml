@@ -5,7 +5,7 @@ transforms:
     keys: [image, label]
     # image_only: False
   
-  - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
+  - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderSemanticClassesd
     keys: label
 
   - _target_: monai.transforms.EnsureChannelFirstd
@@ -20,13 +20,6 @@ transforms:
   # - _target_: monai.transforms.Resized
   #   keys: [image, label]
   #   spatial_size: [32, 420, 420]
-  - _target_: monai.transforms.RandAffined
-    keys: [image, label]
-    prob: 0.15
-    scale_range: [0.1, 0.15, 0.15]
-    rotate_range: [0.1, 0.3, 0.3]
-    padding_mode: zeros
-    mode: [3, nearest]
   # Intensity augmentation
 
   - _target_: monai.transforms.NormalizeIntensityd
@@ -52,14 +45,14 @@ transforms:
     prob: 0.15
     degree: 5
     coeff_range: [-0.1, 0.1]
-
-  - _target_: monai.transforms.RandSimulateLowResolutiond
-    keys: image
-    prob: 0.1
-    downsample_mode: bilinear
-    upsample_mode:  trilinear
-    align_corners: True
-    zoom_range: [0.8, 1.0]
+  
+  - _target_: monai.transforms.RandAffined
+    keys: [image, label]
+    prob: 0.15
+    scale_range: [0.1, 0.15, 0.15]
+    rotate_range: [0.1, 0.3, 0.3]
+    padding_mode: zeros
+    mode: [3, nearest]
 
   - _target_: src.data.transforms.array.PercentileNormalizeIntensityd
     keys: image

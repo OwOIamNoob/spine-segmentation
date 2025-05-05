@@ -3,21 +3,24 @@ _target_: src.models.spider_semantic_module_test.SpiderLitModule
 defaults:
   - optimizer: adam
   - scheduler: warmup_cosine
-  - criterion: dicece_weighted
+  - criterion: dice_dtm_fake
   - net: iso_attn_unet
   - metric: default
+  - post_proc: default
 
 # compile model for faster training with pytorch 2.0
 compile: false
 
-sw_batch_size: ${data.batch_size}
-roi: [32, 256, 256] 
+sw_batch_size: 4
+roi: [16, 256, 256] 
 infer_overlap: 0.5
 
 # For criterion and metrics configuration
 name: ["None", "Vertebrae", "Canal", "Disk"]
 # Background is ignored
-argmax: True
+argmax: False
 softmax: True
-threshold: 0.6
-ema: null
+threshold: 0.5
+ema:
+  _target_: src.utils.ema.LitEma
+  _partial_: True

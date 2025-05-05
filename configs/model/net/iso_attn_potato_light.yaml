@@ -1,0 +1,17 @@
+_target_: src.models.net.potato.potato.SupervisionPotatoNet
+# _partial_: True
+spatial_dims: 3
+in_channels: 1
+out_channels: 4
+
+kernel_size: [5, 3, 3, 3, 3, 3, 3]
+up_kernel_size: [5, 5, 3, 3, 3, 3]
+
+# Channels matching
+channels: [16, 32, 64, 128, 256, 512]
+strides: [[2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [1, 2, 2], [1, 2, 2], [1, 2, 2]]
+groups: [4, 2, 2, 1, 1, 1]
+# Training properties
+dropout: 0.5
+# Starting at full slices
+depth: 3

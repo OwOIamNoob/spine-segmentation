@@ -6,6 +6,7 @@ from monai import transforms
 from monai.data.utils import list_data_collate, pad_list_data_collate
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, random_split
+
 import albumentations as A
 from albumentations import Compose
 from albumentations.pytorch.transforms import ToTensorV2
@@ -22,9 +23,7 @@ class SpiderKFoldDataModule(LightningDataModule):
                  spacing = [1., 1., 1.],
                  transform_train: Optional[monai.transforms.Compose] = None,
                  transform_val: Optional[monai.transforms.Compose] = None,
-                 k: int = 5, # no. epoch before switching fold
-                 split_seed: int = 200,
-                 num_splits: int = 10,
+                 fold: int = 3,
                  batch_size: int = 16, 
                  num_workers: int = 8,
                  pin_memory: bool = False,
@@ -39,8 +38,6 @@ class SpiderKFoldDataModule(LightningDataModule):
         self.data_test: Optional[Dataset] = None
         # num_splits = 10 means our dataset will be split to 10 parts
         # so we train on 90% of the data and validate on 10%
-        assert 1 <= self.hparams.k <= self.hparams.num_splits, "incorrect fold number"
-
     
     
     @property
@@ -57,22 +54,20 @@ class SpiderKFoldDataModule(LightningDataModule):
 
         
         if not self.data_train and not self.data_val and not self.data_test:
-            dataset_full = SpiderDataset(   data_dir=self.hparams.data_dir,
+            self.data_train = SpiderDataset(data_dir=self.hparams.data_dir,
                                             json_path=self.hparams.json_path,
-                                            keys=['training'],
-                                            addon=False)
-            
-            kf = KFold(n_splits=self.hparams.num_splits, 
-                        shuffle=True, 
-                        random_state=self.hparams.split_seed)
-            train_indexes, val_indexes = [k for k in kf.split(dataset_full)][self.hparams.k]
+                                            keys=str(self.hparams.fold),
+                                            valid=False)
+            self.data_val = SpiderDataset(data_dir=self.hparams.data_dir,
+                                            json_path=self.hparams.json_path,
+                                            keys=str(self.hparams.fold),
+                                            valid=True)
+            self.data_test = SpiderDataset(data_dir=self.hparams.data_dir,
+                                            json_path=self.hparams.json_path,
+                                            keys='-1',
+                                            valid=False)
 
-            self.data_train = SpiderDataset(data = dataset_full[train_indexes.tolist()])
-            self.data_val = SpiderDataset(data = dataset_full[val_indexes.tolist()], 
-                                            data_dir=self.hparams.data_dir,
-                                            json_path=self.hparams.json_path,
-                                            keys=['faulty'],
-                                            addon=True)
+            print(len(self.data_train), len(self.data_val), len(self.data_test))
     
     def get_transformed_dataset(self, dataset, transform):
         return SpiderTransformedDataset(dataset, transform)
@@ -95,7 +90,7 @@ class SpiderKFoldDataModule(LightningDataModule):
                             collate_fn = pad_list_data_collate)
     
     def test_dataloader(self) -> DataLoader[Any]:
-        return DataLoader(dataset=self.get_transformed_dataset(self.data_val, self.hparams.transform_val), 
+        return DataLoader(dataset=self.get_transformed_dataset(self.data_test, self.hparams.transform_val), 
                             batch_size=self.hparams.batch_size, 
                             num_workers=self.hparams.num_workers,
                             pin_memory=self.hparams.pin_memory,
@@ -135,6 +130,8 @@ class SpiderKFoldDataModule(LightningDataModule):
 if __name__=="__main__":
     from omegaconf import DictConfig
     import hydra
+    import nibabel as nib
+    import numpy as np
     
     @hydra.main(version_base="1.3", config_path="../../configs", config_name="train.yaml")
     def main(cfg: DictConfig):
@@ -149,14 +146,32 @@ if __name__=="__main__":
         # print(type(batch["image"]), type(batch["label"]), type(batch["border"]))
         # print(batch["image"].size(), batch["label"].size(), batch["border"].size())
 
-    @hydra.main(version_base="1.3", config_path="../../configs", config_name="train.yaml")
+    @hydra.main(version_base="1.3", config_path="../../configs", config_name="train_cord.yaml")
     def test(cfg: DictConfig):
+        affine = np.diag([1, 1, 1, 1])
+        out_dir = "data/debug"
         datamodule = hydra.utils.instantiate(cfg.data)
         # print(cfg.data)
         datamodule.setup()
-        transformed_data = datamodule.test_val_transform()
-        print(datamodule.data_train[0])
-        print(transformed_data[2]["border"].size())
+        loader = iter(datamodule.train_dataloader())
+        voxels = 0
+        batch = 1
+        
+        for i in range(1):
+            batch = next(loader)
+            print(batch['image'].shape, batch['label'].shape, np.unique(batch['label']))
+            print(f"Iteration {i}: {batch['name'][0]} ok")
+            label = batch['label'][0, 0].detach().cpu().numpy()
+            image = batch['image'][0, 0].detach().cpu().numpy()
+            label_nib = nib.Nifti1Image(label, affine)
+            nib.save(label_nib, f"{out_dir}/label.nii.gz")
+            image_nib = nib.Nifti1Image(image, affine)
+            nib.save(image_nib, f"{out_dir}/image.nii.gz")
+        
+            # voxels += torch.sum(label, dim=[0, 2, 3, 4])
+
+        # print(voxels, torch.sum(voxels))
+
 
     # main()
-    main()
+    test()

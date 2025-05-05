@@ -4,7 +4,7 @@ transforms:
     keys: [image, label]
     image_only: False
     
-  - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
+  - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderSemanticClassesd
     keys: [label]
 
   - _target_: monai.transforms.EnsureChannelFirstd

@@ -1,7 +1,7 @@
 _target_: monai.networks.nets.AttentionUnet
 
 # _partial_: True
-spatial_dims: 3
+spatial_dims: 1
 in_channels: 1
 out_channels: 3
 
@@ -13,4 +13,4 @@ channels: [16, 32, 64, 128, 256, 512]
 strides: [2, 2, 2, 2, 2]
 
 # Training properties
-dropout: 0.3
+dropout: 0.5

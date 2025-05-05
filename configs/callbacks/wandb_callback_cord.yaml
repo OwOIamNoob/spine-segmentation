@@ -1,0 +1,9 @@
+wandb_callback:
+  _target_: src.utils.callback.wandb_cord.WandbCallback
+  labels: ${model.name}
+  ignore: [0]
+  # Gradient properties
+  grad: True
+  radius: 5
+  mode: cross
+  grad_alpha: 0.2

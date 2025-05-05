@@ -1,70 +1,27 @@
-_target_: src.app.infer_spider.Inferer
+_target_: src.app.infer_spider_new.Inferer
 
-exp_name: Spider_Test
-checkpoint_path: /work/hpc/spine-segmentation/logs/train/runs/192-36-v2/checkpoints/epoch_253.ckpt ##/work/hpc/spine-segmentation/logs/train/runs/test_delete/semantic_old_version.ckpt
+defaults:
+  - dataloader: spider
+  - net: 2024-10-16_19-48-52
+  - post_proc: default
+
+exp_name: Clean_${now:%Y-%m-%d}_${now:%H-%M-%S}
+exdir: ${paths.infer_exdir}
+checkpoint_path: ${paths.infer_ckpt}/2024-10-16_19-48-52.pth ##/work/hpc/spine-segmentation/logs/train/runs/test_delete/semantic_old_version.ckpt
 data_name: Spider
 
-data_loader:
-  _target_: torch.utils.data.DataLoader
-
-  dataset:
-    _target_: src.data.components.spider_dataset.SpiderTransformedDataset
-
-    dataset:
-      _target_: src.data.components.spider_dataset.SpiderDataset
-      data_dir: /data/hpc/spine/dataset/spine_nii
-      json_path: /data/hpc/spine/jsons/spine_infer_old_version.json
-
-    transform:
-      _target_: monai.transforms.Compose
-      transforms:
-        - _target_: monai.transforms.LoadImaged
-          keys: [image, label]
-          image_only: False
-          
-        # - _target_: monai.transforms.EnsureChannelFirstd
-        #   keys: image
-        #   channel_dim: no_channel
-
-        - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
-          keys: [label]
-
-        - _target_: monai.transforms.Resized
-          keys: [image, label]
-          spatial_size: [32, 420, 420]
-
-        - _target_: monai.transforms.NormalizeIntensityd
-          keys: image
-          nonzero: True
-          channel_wise: True
-
-        - _target_: monai.transforms.ToTensord
-          keys: [image, label]
-
-  batch_size: 1
-  num_workers: 4
-  pin_memory: False
-  shuffle: False
-  collate_fn: ## can delete?
-    _target_: monai.data.utils.list_data_collate
-    _partial_: true
-
-net:
-  _target_: monai.networks.nets.SwinUNETR
-  img_size: [32, 160, 160]
-  in_channels: 2
-  out_channels: 3
-  feature_size: 48
-  drop_rate: 0.0
-  attn_drop_rate: 0.0
-  dropout_path_rate: 0.0
-  use_checkpoint: true
 
 model_inferer:
   _target_: monai.inferers.sliding_window_inference
   _partial_: true
-  roi_size: [32, 160, 160] ##[roi_size_x, roi_size_y, roi_size_z]
+  roi_size:  [32, 256, 256]
   sw_batch_size: 1 ##batch size for sliding window inference
   overlap: 0.6 ##overlap for sliding window inference
 
-device: cuda
+device: cuda:0
+
+metric: ${model.metric}
+
+softmax: True
+argmax: False
+threshold: 0.6

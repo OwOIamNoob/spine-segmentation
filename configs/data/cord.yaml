@@ -1,0 +1,17 @@
+_target_: src.data.spider_datamodule.SpiderKFoldDataModule
+
+defaults:
+  - transform_train: cord
+  - transform_val: cord
+
+data_dir: /work/hpc/potato/data-multi-subject
+json_path: ${paths.json_path}/spinal_cord_t1t2.json
+spacing: [1., 1., 1.] # Upsampling and larger window size seems to odd ? 
+
+fold: 9 # pick validate fold
+
+batch_size: 1 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
+num_workers: 8
+pin_memory: False
+
+include_background: False 

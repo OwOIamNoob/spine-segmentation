@@ -1,0 +1,161 @@
+_target_: monai.transforms.Compose
+
+transforms:
+  - _target_: monai.transforms.LoadImaged
+    keys: [image, label]
+    dtype:
+      _target_: torch.__dict__.get
+      _args_: 
+        - float32
+        - int32
+    # image_only: False
+  
+  - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesd
+    keys: label
+
+  - _target_: monai.transforms.EnsureChannelFirstd
+    keys: image
+    # channel_dim: no_channel
+  
+  - _target_: monai.transforms.NormalizeIntensityd
+    keys: image
+    channel_wise: True
+    nonzero: True
+
+  - _target_: monai.transforms.Spacingd
+    keys: [image, label]
+    pixdim:  ${data.spacing}
+    mode: [3, linear]
+    padding_mode: zeros
+    align_corners: True
+    ensure_same_shape: False
+    
+
+  # - _target_: monai.transforms.Resized
+  #   keys: [image, label]
+  #   spatial_size: [32, 420, 420]
+  # Intensity augmentation
+
+  
+  - _target_: monai.transforms.Rand3DElasticd
+    keys: [image, label]
+    prob: 0.5
+    sigma_range: [1.5, 3.]
+    magnitude_range: [1, 5]
+    scale_range: [0.1, 0.15, 0.15]
+    rotate_range: [0.1, 0.1, 0.1]
+    shear_range: [0.05, 0.15, 0.15]
+    padding_mode: zeros
+    mode: [3, linear]
+  
+  - _target_: monai.transforms.AsDiscreted
+    keys: label
+    threshold: 0.35
+    dim: 0
+    keepdim: True 
+  
+  - _target_: src.data.transforms.array.SemanticBackgroundd
+    keys: label
+    include_background: ${data.include_background}
+
+  # Spatial processing and augmentation
+  - _target_: monai.transforms.RandCropByLabelClassesd
+    keys: [image, label]
+    label_key: label
+    spatial_size: ${model.roi}
+    num_classes: 16
+    num_samples: 4
+    allow_smaller: False
+    warn: False
+  
+  - _target_: src.data.transforms.array.SpiderInstanceToSemanticd
+    keys: label
+    include_background: True
+
+  
+  - _target_: monai.transforms.OneOf
+    transforms:  
+      - _target_: monai.transforms.RandGaussianNoised
+        keys: image
+        prob: 0.3
+        mean: 0
+        std: 0.2
+      - _target_: monai.transforms.RandGibbsNoised
+        keys: image
+        prob: 0.3
+        alpha: [0.1, 0.2]
+    weights: [0.3, 0.7]
+
+  - _target_: monai.transforms.RandBiasFieldd
+    keys: image
+    prob: 0.15
+    degree: 5
+    coeff_range: [-0.05, 0.05]
+
+  - _target_: src.data.transforms.array.PercentileNormalizeIntensityd
+    keys: image
+    percentile: [0.05, 0.95]
+    nonzero: True
+    channel_wise: True
+    clip: True
+    mean: 0.5
+    std: 0.5
+    
+  # - _target_: monai.transforms.ScaleIntensityd
+  #   keys: image
+  #   channel_wise: True
+  #   minv: 0.0
+  #   maxv: 1.0
+
+  
+  # - _target_: monai.transforms.SpatialPadd
+  #   keys: [image, label]
+  #   spatial_size: ${model.roi} # Ensure channel
+  #   method: end
+  #   mode: constant
+  #   value: 0
+  # - _target_: monai.transforms.RandSpatialCropd
+  #   keys: [image, label]
+  #   roi_size: ${model.roi}
+  #   random_center: True 
+  #   random_size: False
+
+    
+  # - _target_: monai.transforms.Resized
+  #   keys: [image, label]
+  #   spatial_size: ${model.roi}
+  #   size_mode: all
+  #   mode: [trilinear, nearest-exact]
+
+  - _target_: monai.transforms.RandFlipd
+    keys: [image, label]
+    prob: 0.5
+    spatial_axis: 0
+
+  - _target_: monai.transforms.RandFlipd
+    keys: [image, label]
+    prob: 0.5
+    spatial_axis: 1
+    
+  # - _target_: monai.transforms.RandFlipd
+  #   keys: [image, label]
+  #   prob: 0.5
+  #   spatial_axis: 2
+  
+
+  # - _target_: monai.transforms.RandShiftIntensityd
+  #   keys: image
+  #   offsets: 0.1
+  #   prob: 0.5
+  # To normalize the signal 
+
+  # - _target_: monai.transforms.ClipIntensityPercentilesd
+  #   keys: image
+  #   lower: 5
+  #   upper: 95
+  #   channel_wise: True
+  #   sharpness_factor: 10
+
+
+  - _target_: monai.transforms.ToTensord
+    keys: [image, label]

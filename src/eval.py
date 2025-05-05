@@ -1,10 +1,11 @@
 from typing import Any, Dict, List, Tuple
-
+import torch
+torch.multiprocessing.set_sharing_strategy('file_system')
 import hydra
 import rootutils
 from lightning import LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
-from omegaconf import DictConfig
+from omegaconf import DictConfig, open_dict
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
@@ -82,13 +83,15 @@ def evaluate(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     return metric_dict, object_dict
 
-
-@hydra.main(version_base="1.3", config_path="../configs", config_name="eval.yaml")
+path = "/work/hpc/spine-segmentation/logs/train/runs/2024-12-11_19-52-36/"
+@hydra.main(version_base="1.3", config_path= path + ".hydra", config_name="config.yaml")
 def main(cfg: DictConfig) -> None:
     """Main entry point for evaluation.
 
     :param cfg: DictConfig configuration composed by Hydra.
     """
+    with open_dict(cfg):
+        cfg.ckpt_path = path + "checkpoints/last.ckpt"
     # apply extra utilities
     # (e.g. ask for tags if none are provided in cfg, print cfg tree, etc.)
     extras(cfg)

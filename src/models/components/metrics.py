@@ -97,7 +97,7 @@ class NamedMetric(Metric):
         elif isinstance(self.metric, _Loss):
             loss = self.metric(pred, gt)
             loss = loss.item() if loss.numel() == 1 else loss
-            self.meter.update(loss, 1)
+            self.meter.update(loss)
         
     def log(self, logger, prefix: str, on_step=False, labels=None, addon: str=""):
         # Anouncements hurray

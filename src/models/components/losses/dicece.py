@@ -28,7 +28,7 @@ from monai.utils import DiceCEReduction, LossReduction, Weight, deprecated_arg, 
 
 ### Local module import
 import rootutils
-rootutils.setup_root("/work/hpc/spine-segmentation", indicator="setup.py", pythonpath=True)
+# rootutils.setup_root("/work/hpc/spine-segmentation", indicator="setup.py", pythonpath=True)
 
 from src.models.components.losses.w_dice import DistanceMapDiceLoss
 from src.utils.weight.spatial import *
@@ -51,7 +51,6 @@ class DistanceMapDiceCELoss(_Loss):
         dice_dtm: Callable | DistanceMapDiceLoss | DiceLoss,
         softmax: bool = True,
         include_background: bool = True,
-        degree: float = 1.0,
         lambda_dice: float = 1.0,
         lambda_ce: float = 1.0,
         reduction: str = 'mean',
@@ -100,11 +99,10 @@ class DistanceMapDiceCELoss(_Loss):
         super().__init__()
         reduction = reduction
 
-        self.dice = dice_dtm(degree=degree, 
-                            weight=weight, 
+        self.dice = dice_dtm(weight=weight, 
                             reduction=reduction,
                             softmax=softmax,
-                            sigmoid=~softmax,
+                            sigmoid=not softmax,
                             batch=batch,
                             include_background=include_background)
         print(type(self.dice))
@@ -124,7 +122,6 @@ class DistanceMapDiceCELoss(_Loss):
         self.old_pt_ver = not pytorch_after(1, 10)
 
         #DiceLoss configuration
-        self.degree = degree
         self.batch = batch
         self.class_weight = weight
         self.device = "cpu"
@@ -149,7 +146,7 @@ class DistanceMapDiceCELoss(_Loss):
         elif not torch.is_floating_point(target):
             target = target.to(dtype=input.dtype)
 
-        return self.cross_entropy(input, target)  # type: ignore[no-any-return]
+        return self.cross_entropy(input, target) # type: ignore[no-any-return]
 
     def bce(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """
@@ -197,18 +194,26 @@ class DistanceMapDiceCELoss(_Loss):
         # Loss forwarding
         # print(input.shape, target.shape)
         dice_loss, weight = self.dice(input, target, export_weight=True)
-        
-        # For dice loss, the positive sign must be put towards sensitive content
-        weight = torch.max(1 - weight, dim=1)[0]
+        # print(weight.shape, input.shape)
+        # # For dice loss, the positive sign must be put towards sensitive content
+        # print(input.shape)
+        # The selected mask of weight       
+        # print(torch.mean(input_one_hot.sum(dim=1)), input_one_hot.shape)
+        # print(torch.mean(one_hot.sum(dim=1)))
+        # print(weight.shape)
 
         if not torch.is_floating_point(target):
             target = target.to(dtype=input.dtype)
 
         if self.softmax:
-            ce_loss = self.ce(input * self.degree, target)
+            ce_loss = self.ce(input, target)
+            weight = 1 + torch.zeros_like(target, dtype=torch.float32).scatter_(1, torch.argmax(input, dim=1, keepdim=True), weight)
         else:
             ce_loss = self.bce(input, target)
+            weight = 1 + weight
         
+        # print(ce_loss.shape, weight.shape)
+        # weight = torch.sum(weight, dim=1)
         # print(ce_loss.shape)
         # apply weight
 
@@ -226,7 +231,7 @@ class DistanceMapDiceCELoss(_Loss):
         else:
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
         
-
+        # print(dice_loss, ce_loss)
         total_loss: torch.Tensor = self.lambda_dice * dice_loss + self.lambda_ce * ce_loss
 
         return total_loss
@@ -276,12 +281,20 @@ if __name__ == "__main__":
         # print(pred.dtype)
         # b, c, h, w, d = 2, 3, 32, 280, 280
         criterion = hydra.utils.instantiate(cfg.model.criterion)
-        sample = torch.full(size=[2, 4, 32, 256, 256], fill_value=0.6)
-        print(sample.min(), sample.max(), sample.dtype, sample.device)
-        print(type(sample))
-        gradient = criterion(sample.to("cuda:2"), sample.to("cuda:2"))
-        print(gradient.size(), gradient)
+        # sample = torch.full(size=[2, 4, 32, 256, 256], fill_value=0.6)
+        # print(sample.min(), sample.max(), sample.dtype, sample.device)
+        # print(type(sample))
+        # gradient = criterion(sample.to("cuda:0"), sample.to("cuda:0"))
+        # print(gradient.size(), gradient)
         # return datamodule
+        datamodule = hydra.utils.instantiate(cfg.data)
+        datamodule.setup()
+        print(type(criterion.dice.spatial_weight))
+        print(type(datamodule))
+        loader = iter(datamodule.train_dataloader())
+        batch = next(loader)
+        gradient = criterion(batch['label'].cuda() * 100, batch['label'].cuda())
+        print(gradient)
     
     test()
     

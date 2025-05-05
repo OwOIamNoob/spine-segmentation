@@ -3,9 +3,10 @@ _target_: monai.transforms.Compose
 transforms:
   - _target_: monai.transforms.LoadImaged
     keys: [image, label]
+
     # image_only: False
   
-  - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic
+  - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderSemanticClassesd
     keys: label
     div: 100
     labels: [0, 1, 2, 3]

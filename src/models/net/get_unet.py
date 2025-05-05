@@ -42,7 +42,7 @@ def get_isotropic_attn_unet(config, func, net, inv=False):
     
     with open_dict(net):
         net._target_ = "monai.networks.nets.AttentionUnet"
-
+        
     # Lets try inversing
     net.strides = stride.tolist()
     net.channels = channels.tolist()

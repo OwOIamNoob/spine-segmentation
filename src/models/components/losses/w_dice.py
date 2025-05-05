@@ -58,7 +58,7 @@ class DistanceMapDiceLoss(_Loss):
     The original paper: Milletari, F. et. al. (2016) V-Net: Fully Convolutional Neural Networks forVolumetric
     Medical Image Segmentation, 3DV, 2016.
 
-    Weights are initialized based on 
+    Weights are initialized based on distance of that voxel to either prediction or ground truth
     """
 
     def __init__(
@@ -67,7 +67,6 @@ class DistanceMapDiceLoss(_Loss):
         to_onehot_y: bool = False,
         sigmoid: bool = False,
         softmax: bool = False,
-        degree: float = 1., 
         other_act: Callable | None = None,
         squared_pred: bool = False,
         jaccard: bool = False,
@@ -127,7 +126,6 @@ class DistanceMapDiceLoss(_Loss):
         self.sigmoid = sigmoid
         self.softmax = softmax
         self.other_act = other_act
-        self.degree = degree
         self.squared_pred = squared_pred
         self.jaccard = jaccard
         self.smooth_nr = float(smooth_nr)
@@ -172,7 +170,7 @@ class DistanceMapDiceLoss(_Loss):
             if n_pred_ch == 1:
                 warnings.warn("single channel prediction, `softmax=True` ignored.")
             else:
-                input = torch.softmax(input * self.degree, 1)
+                input = torch.softmax(input, 1)
             
         # Other act is operated on input
         if self.other_act is not None:
@@ -203,7 +201,17 @@ class DistanceMapDiceLoss(_Loss):
             label_weight = self.spatial_weight(target)
             input_weight = self.spatial_weight(input)
             # Forge label and input together
-            weight = torch.where((input_weight - label_weight > 0), label_weight, input_weight)
+            # weight = (input_weight + label_weight) / 2
+            if  self.spatial_weight.inverse:    
+                # weight = torch,max(dim=reduce_axis)[...]
+                weight = torch.where((input_weight - label_weight < 0), label_weight, input_weight)
+                if not self.spatial_weight.inverse_bg:
+                    weight[:, 0] = torch.where((input_weight[:, 0] - label_weight[:, 0] > 0), label_weight[:, 0], input_weight[:, 0])
+            else:
+                weight = torch.where((input_weight - label_weight > 0), label_weight, input_weight)
+                if self.spatial_weight.inverse_bg:
+                    weight[:, 0] = torch.where((input_weight[:, 0] - label_weight[:, 0] < 0), label_weight[:, 0], input_weight[:, 0])
+            
             del label_weight
             del input_weight
         else: 
@@ -217,7 +225,10 @@ class DistanceMapDiceLoss(_Loss):
         # Computation 
         denominator = torch.sum( input + target +  weight * (input * (1 - target) + (1 - input) * target), dim=reduce_axis)
         numerator = torch.sum(input * target, dim=reduce_axis)
-        
+        numerator *= denominator == 0
+        if torch.isnan(numerator).any():
+            import IPython; IPython.embed()
+            
         f: torch.Tensor = 1.0 - (2 * numerator + self.smooth_nr) / (denominator + self.smooth_dr)
 
         # Avoid footprint
@@ -230,23 +241,29 @@ class DistanceMapDiceLoss(_Loss):
         if self.post_proc is not None:
             # print("Proc!")
             f = self.post_proc(f)
+        
+        if self.norm is True: 
+            class_weight = torch.mean(weight, dim=reduce_axis)
+            class_weight = torch.sqrt(1 / class_weight)
+        else: 
+            class_weight = self.class_weight
 
-        if self.class_weight is not None and num_of_classes != 1:
+        if class_weight is not None and num_of_classes != 1:
             # make sure the lengths of weights are equal to the number of classes
-            if self.class_weight.ndim == 0:
-                self.class_weight = torch.as_tensor([self.class_weight] * num_of_classes)
+            if class_weight.ndim == 0:
+                class_weight = torch.as_tensor([class_weight] * num_of_classes)
             else:
-                if self.class_weight.shape[0] != num_of_classes:
+                if class_weight.shape[0] != num_of_classes:
                     raise ValueError(
                         """the length of the `weight` sequence should be the same as the number of classes.
                         If `include_background=False`, the weight should not include
                         the background category class 0."""
                     )
-            if self.class_weight.min() < 0:
+            if class_weight.min() < 0:
                 raise ValueError("the value/values of the `weight` should be no less than 0.")
             # apply class_weight to loss ONLY IF IT WAS NOT NORMED BEFORE
         
-            f = f * self.class_weight.to(f)
+            f = f * class_weight.to(f)
 
 
         if self.reduction == LossReduction.MEAN.value:
@@ -279,11 +296,11 @@ if __name__ == "__main__":
     import monai
     import os
     from src.data.spider_datamodule import *
-
+    import cv2
     # __________________ Additional configuration ________________________________________ #
     OmegaConf.register_new_resolver("zoom", lambda input, ratio: [x * (1 + y) for x, y in zip(input, ratio)])
 
-    @hydra.main(version_base="1.3", config_path="../../../../configs", config_name="train.yaml")
+    @hydra.main(version_base="1.3", config_path="../../../../configs", config_name="train_cord.yaml")
     def test(cfg: DictConfig):
         # criterion = DistanceMapDiceLoss(gradient_kernel=7, 
         #                                 gaussian_kernel_size=11, 
@@ -300,35 +317,43 @@ if __name__ == "__main__":
         dice = monai.losses.DiceLoss(sigmoid=False, softmax=False, to_onehot_y=False)
         datamodule = hydra.utils.instantiate(cfg.data)
         datamodule.setup()
-        print(type(criterion.spatial_weight))
+        print(type(criterion.spatial_weight), criterion.sigmoid)
         print(type(datamodule))
-        loader = iter(datamodule.train_dataloader())
+        loader = iter(datamodule.val_dataloader())
         # label_img = sitk.GetImageFromArray(torch.argmax(batch['label'][1], dim=0).detach().numpy())
        
         # # Always get first sample 
         batch = next(loader)
-        print(batch['image'].shape)
+        # batch['label'] = batch['label'][:, :, 8, :, :]
+        # print(batch['image'].shape)
         # print(batch['image'].shape, batch['label'].shape)
         # print(torch.argmax(batch['label'][0].detach(), dim=0).shape)
-        # tn_weight = criterion.get_weight(batch['label'].to("cuda:3"))
-        # print(tn_weight.shape)
+        tn_weight = criterion.spatial_weight(batch['label'].cuda())
+        print(tn_weight.shape)
         # print(torch.mean(torch.sum(tn_weight, 1), dim=[1, 2, 3]))
         # print("Min and max:", tn_weight.min(), tn_weight.max())
-
-        # writer = sitk.ImageFileWriter()
+        tn_np = tn_weight.detach().cpu().numpy()
+        tn_np = tn_weight[0, 0]
+        # tn_np -= tn_np.min()
+        # tn_np = (tn_np * 255).astype(np.uint8)
+        # tn_np = np.stack([tn_np, tn_np, tn_np], axis=-1)
+        # cv2.imwrite("/work/hpc/spine-segmentation/src/utils/weight/sample_2d.jpg", tn_np)
+        writer = sitk.ImageFileWriter()
         
-        # writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_input.nii.gz")
-        # writer.Execute(sitk.GetImageFromArray(batch['image'][1, 0].detach().numpy()))
+        writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_input.nii.gz")
+        writer.Execute(sitk.GetImageFromArray(batch['image'][0, 0].detach().numpy()))
         
         # b, c, h, w, d = batch['label'].shape
+        # print(batch['label'].unique())
         # if c == 3:
         #     bg = torch.zeros(b, 1, h, w, d, dtype=batch['label'].dtype, device=batch['label'].device)
         #     batch['label'] = torch.cat([bg, batch['label']], dim=1)
         # # grad =  
         # # print(batch[''])
-        # writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_label.nii.gz")
-        # writer.Execute(sitk.GetImageFromArray(torch.argmax(batch['label'][0].detach(), dim=0).numpy()))
-        
+        writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map_label.nii.gz")
+        writer.Execute(sitk.GetImageFromArray(torch.argmax(batch['label'][0, 0].detach(), dim=0).numpy()))
+        writer.SetFileName("/work/hpc/spine-segmentation/outputs/dummy/distance_map.nii.gz")
+        writer.Execute(sitk.GetImageFromArray(tn_weight[0, 0].detach().cpu().numpy()))
         # for i in range(4):
         #     weight_img = sitk.GetImageFromArray(tn_weight[0, i].detach().cpu().numpy())
             
@@ -336,44 +361,45 @@ if __name__ == "__main__":
         #     writer.Execute(weight_img)
         
         # Toy testing 
-        criterion.softmax = False
+        # criterion.softmax = False
         # criterion.sigmoid = False
-        # criterion.magnitude = 0.
-        criterion.class_weight = None
+        # # criterion.magnitude = 0.
+        # criterion.class_weight = None
         
-        refs = []
-        scores = []
-        for i in range(1):
-            refs.append([])
-            scores.append([])
-            batch = next(loader)
-            print(batch["image"].min(), batch["image"].max())
-            print(np.unique(batch['label']))
-            for j in range(100):
-                print("Noise level", 100 - j)
-                input, target = (j / 5 + torch.rand(*batch['label'].shape)) * batch['label'], batch['label']
-                input = input.to('cuda:3')
-                target = target.to('cuda:3')
-                print(input.device)
-                ref = dice(target, target).detach().cpu().item()
-                score = criterion(target, target).detach().cpu().item()
-                refs[i].append(ref)
-                scores[i].append(score)
-                print("Ref:", ref)
-                print("Criterion:", score)
-                np.savetxt("/work/hpc/spine-segmentation/outputs/dummy/dice_loss.txt", refs)
-                np.savetxt("/work/hpc/spine-segmentation/outputs/dummy/criterion.txt", scores)
+        # refs = []
+        # scores = []
+        # for i in range(1):
+        #     refs.append([])
+        #     scores.append([])
+        #     batch = next(loader)
+        #     print(batch["image"].min(), batch["image"].max())
+        #     print(np.unique(batch['label']))
+        #     for j in range(100):
+        #         print("Noise level", 100 - j)
+        #         input, target = (j / 5 + torch.rand(*batch['label'].shape)) * batch['label'], batch['label']
+        #         print(np.unique(target))
+        #         input = input.clamp(0, 1).to('cuda:0')
+        #         target = target.to('cuda:0')
+        #         print(input.device)
+        #         ref = dice(input, target).detach().cpu().item()
+        #         score = criterion(input, target).detach().cpu().item()
+        #         refs[i].append(ref)
+        #         scores[i].append(score)
+        #         print("Ref:", ref)
+        #         print("Criterion:", score)
+        #         np.savetxt("/work/hpc/spine-segmentation/outputs/dummy/dice_loss.txt", refs)
+        #         np.savetxt("/work/hpc/spine-segmentation/outputs/dummy/criterion.txt", scores)
 
         
-        # pred = deepcopy(batch["label"])
-        # print(pred.dtype)
-        # b, c, h, w, d = 2, 3, 32, 280, 280
-        # sample = torch.full(size=[1, 3, 32, 280, 280], fill_value=0.6).to("cuda:2")
-        # print(sample.min(), sample.max(), sample.dtype, sample.device)
-        # print(type(sample))
-        # gradient, _, _ = criterion(sample, sample)
-        # print(gradient.size(), gradient)
-        # return datamodule
+    #     # pred = deepcopy(batch["label"])
+    #     # print(pred.dtype)
+    #     # b, c, h, w, d = 2, 3, 32, 280, 280
+    #     # sample = torch.full(size=[1, 3, 32, 280, 280], fill_value=0.6).to("cuda:2")
+    #     # print(sample.min(), sample.max(), sample.dtype, sample.device)
+    #     # print(type(sample))
+    #     # gradient, _, _ = criterion(sample, sample)
+    #     # print(gradient.size(), gradient)
+    #     # return datamodule
     
     test()
     

@@ -26,6 +26,6 @@ net:
   strides: [2, 2, 2, 2, 2]
 
   # Training properties
-  dropout: 0.5
+  dropout: 0.3
 
 inv: True 

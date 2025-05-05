@@ -98,7 +98,7 @@ class SpiderLitModule(LightningModule):
 
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
-        self.save_hyperparameters(logger=False, ignore=['net'])
+        self.save_hyperparameters(logger=False, ignore=['criterion'])
 
         self.net = net
         
@@ -112,7 +112,7 @@ class SpiderLitModule(LightningModule):
         )
         
         self.dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN_BATCH, get_not_nans=True)
-        self.post_activation = Activations(softmax=True)
+        self.post_activation = Activations(softmax=Tr)
         self.post_pred = AsDiscrete(argmax=False, threshold=threshold)
         
         self.val_acc_max = 0
@@ -406,5 +406,5 @@ if __name__ == "__main__":
     print(1)
     @hydra.main(version_base="1.3", config_path="../../configs", config_name="train.yaml")
     def test(cfg: DictConfig):
-        model = hydra.utils.instantiate(cfg.model)
+        model = hydra.utils.instantiate(cfg.model.net)
     test()

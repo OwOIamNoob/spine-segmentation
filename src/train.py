@@ -12,7 +12,8 @@ from omegaconf import DictConfig, OmegaConf
 
 # __________________ Additional configuration ________________________________________ #
 OmegaConf.register_new_resolver("zoom", lambda input, ratio: [x * (1 + y) for x, y in zip(input, ratio)])
-rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+rootutils.setup_root(__file__, indicator="setup.py", pythonpath=True)
+from src.models.net.potato.potato import SupervisionPotatoNet
 # ------------------------------------------------------------------------------------ #
 # the setup_root above is equivalent to:
 # - adding project root dir to PYTHONPATH

@@ -13,7 +13,7 @@ import json
 import os
 import rootutils
 
-rootutils.setup_root(search_from=__file__, indicator="setup.py", pythonpath=True)
+# rootutils.setup_root(search_from=__file__, indicator="setup.py", pythonpath=True)
 from src.data.transforms import array
 from src.data.transforms import utils
 
@@ -25,29 +25,35 @@ class SpiderDataset(Dataset):
                  data_dir: str = "", 
                  json_path: str = "",
                  keys = ["training"],
-                 addon = False
+                 valid = False
                  ):
         super().__init__()
         self.data = list()
         self.data_dir = data_dir
         if data is not None:
             self.data = data
-            # Additional data retrieval
-            if addon:
-                self.setup(json_path, keys)
         else:
             if data_dir == "" or json_path == "":
                 raise AssertionError("No dataset ?")
-            self.setup(json_path, keys)
+            self.setup(json_path, keys, valid=valid)
     
-    def setup(self, json_path, keys):
+    def setup(self, json_path, keys, valid=True):
+        if not isinstance(keys, list):
+            keys = [keys]
+        print(keys)
         json_object = json.load(open(json_path, "r"))
         json_keys = json_object.keys()
-        for key in keys:
-            if key in json_keys:
+        if valid: 
+            for key in keys: 
+                assert key in json_keys, f"Key {key} not presented in dataset"
                 self.data.extend(json_object[key])
-            else: 
-                print("Key does not exist in json file, skipping !!!")
+        else:
+            for key in json_keys:
+                if key in keys: 
+                    continue
+                self.data.extend(json_object[key])
+            
+                
         # else:
         #     try:
         #         self.data.extend(json_object)
@@ -69,7 +75,9 @@ class SpiderDataset(Dataset):
         # Adding border into dataset 
         if "border" in self.data[index].keys():
             output["border"] = os.path.join(self.data_dir, self.data[index]["border"])
-            
+        for key in self.data[index].keys():
+            if key not in ['image', 'label']:
+                output[key] = self.data[index][key]
         return output
     
     # In case they query in list of index
@@ -110,7 +118,7 @@ if __name__=="__main__":
     # dataset = SpiderDataset(data_dir = "./data/dataset", json_path="/data/hpc/spine/jsons/brats21_folds_one.json")
     
     transform = monai.transforms.Compose([monai.transforms.LoadImaged(keys=["image", "label"], image_only = False),
-                                          array.ConvertToMultiChannelBasedOnSpiderClassesdSemantic(keys=["label"]),
+                                          array.ConvertToMultiChannelBasedOnSpiderSemanticClassesd(keys=["label"]),
                                           monai.transforms.EnsureChannelFirstd(keys="image", channel_dim='no_channel'),
                                           monai.transforms.Spacingd(keys=["image", "label"], pixdim=[1.75, 0.625, 0.58742571], mode=(3, "nearest")),
                                         #   monai.transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys=["label"]),

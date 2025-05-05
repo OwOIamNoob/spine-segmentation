@@ -1,0 +1,57 @@
+_target_: monai.transforms.Compose
+transforms:
+  - _target_: monai.transforms.LoadImaged
+    keys: [image, label]
+    image_only: False
+    
+  - _target_: src.data.transforms.array.ConvertToMultiChannelBasedOnSpiderSemanticClassesd
+    keys: [label]
+
+  - _target_: monai.transforms.EnsureChannelFirstd
+    keys: image
+
+    # channel_dim: no_channel
+  
+  - _target_: monai.transforms.Spacingd
+    keys: [image, label]
+    pixdim:  ${data.spacing}
+    mode: [3, linear]
+    padding_mode: zeros
+    align_corners: True
+    ensure_same_shape: False
+
+  # - _target_: monai.transforms.NormalizeIntensityd
+  #   keys: image
+  #   nonzero: True
+  #   channel_wise: True
+
+  - _target_: monai.transforms.GaussianSharpend 
+    keys: image
+    sigma1: [2., 5.5, 5.5]
+    sigma2: [0.8, 2., 2.]
+    approx: erf
+    alpha: 20.0
+
+  - _target_: src.data.transforms.array.PercentileNormalizeIntensityd
+    keys: image
+    percentile: [0.05, 0.95]
+    nonzero: True
+    channel_wise: True
+    clip: True
+    mean: 0.5
+    std: 0.5
+
+  - _target_: monai.transforms.AsDiscreted
+    keys: label
+    threshold: 0.5
+    dim: 1
+    keepdim: True 
+
+  - _target_: src.data.transforms.array.SemanticBackgroundd
+    keys: label
+    include_background: ${data.include_background}
+
+    
+
+  - _target_: monai.transforms.ToTensord
+    keys: [image, label]

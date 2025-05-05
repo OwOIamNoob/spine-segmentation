@@ -1,0 +1,16 @@
+_target_: monai.networks.nets.AttentionUnet
+
+# _partial_: True
+spatial_dims: 3
+in_channels: 1
+out_channels: 1
+
+kernel_size: 3
+up_kernel_size: 3
+
+# Channels matching
+channels: [16, 32, 64, 128, 256, 256]
+strides: [2, 2, 2, 2, 1]
+
+# Training properties
+dropout: 0.5
